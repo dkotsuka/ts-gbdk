@@ -3,6 +3,8 @@
 SDK TypeScript que transpila para C compativel com [GBDK-2020](https://github.com/gbdk-2020/gbdk-2020).
 Escreva jogos Game Boy em TypeScript e gere ROMs `.gb` / `.gbc`.
 
+Para os próximos passos do projeto veja o [ROADMAP](./ROADMAP.md).
+
 ## Como funciona
 
 ```
