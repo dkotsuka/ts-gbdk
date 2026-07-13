@@ -28,6 +28,17 @@
 }
 
 .editor-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.editor-tab-dirty {
+  color: #4ea1ff;
+  font-weight: 700;
+}
+
+.editor-tab {
   cursor: pointer;
 }
 
@@ -52,6 +63,52 @@
   overflow: auto;
 }
 
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--editor-bg) 84%, var(--sidebar-bg));
+}
+
+.editor-toolbar-file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--editor-gutter);
+  font-size: 0.78rem;
+}
+
+.editor-save-button {
+  border: 1px solid var(--border);
+  background: var(--button-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.42rem 0.8rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.editor-save-button:hover:not(:disabled) {
+  background: var(--button-bg-hover);
+}
+
+.editor-save-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-save-error {
+  padding: 0.45rem 0.9rem;
+  color: #d87f7f;
+  font-size: 0.78rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .editor-gutter {
   padding: 1rem 0.75rem 1rem 1rem;
   border-right: 1px solid var(--border);
@@ -74,6 +131,24 @@
   overflow: visible;
   font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: 0.89rem;
+}
+
+.editor-textarea {
+  width: 100%;
+  min-height: 100%;
+  border: 0;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  background: transparent;
+  color: var(--editor-code);
+  resize: none;
+  outline: none;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 0.89rem;
+  line-height: 1.55rem;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
 }
 
 .editor-empty-state {

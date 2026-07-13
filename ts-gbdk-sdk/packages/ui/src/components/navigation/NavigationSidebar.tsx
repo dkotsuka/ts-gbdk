@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiBookOpen,
   FiFile,
@@ -15,6 +15,7 @@ type BrowserFileSystemEntry = {
 };
 
 type BrowserFileSystemDirectoryHandle = {
+  kind: "directory";
   name: string;
   values: () => AsyncIterable<BrowserFileSystemEntry>;
   getDirectoryHandle: (
@@ -25,6 +26,12 @@ type BrowserFileSystemDirectoryHandle = {
     name: string,
     options?: { create?: boolean },
   ) => Promise<FileSystemFileHandle>;
+  queryPermission?: (descriptor?: {
+    mode?: "read" | "readwrite";
+  }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: {
+    mode?: "read" | "readwrite";
+  }) => Promise<PermissionState>;
 };
 
 type BrowserWindow = Window & {
@@ -53,6 +60,143 @@ type NavigationSidebarProps = {
     fileHandle: FileSystemFileHandle,
   ) => Promise<void>;
 };
+
+const PERSISTENCE_DB_NAME = "ts-gbdk-ui-workspace";
+const PERSISTENCE_STORE_NAME = "workspace";
+const LAST_PROJECT_KEY = "last-project-handle";
+
+function openPersistenceDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(PERSISTENCE_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const database = request.result;
+
+      if (!database.objectStoreNames.contains(PERSISTENCE_STORE_NAME)) {
+        database.createObjectStore(PERSISTENCE_STORE_NAME);
+      }
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      reject(request.error);
+    };
+  });
+}
+
+async function persistLastProjectHandle(
+  handle: BrowserFileSystemDirectoryHandle,
+): Promise<void> {
+  const database = await openPersistenceDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(
+      PERSISTENCE_STORE_NAME,
+      "readwrite",
+    );
+    const store = transaction.objectStore(PERSISTENCE_STORE_NAME);
+
+    store.put(handle, LAST_PROJECT_KEY);
+
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
+
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function loadLastProjectHandle(): Promise<BrowserFileSystemDirectoryHandle | null> {
+  const database = await openPersistenceDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(
+      PERSISTENCE_STORE_NAME,
+      "readonly",
+    );
+    const store = transaction.objectStore(PERSISTENCE_STORE_NAME);
+    const request = store.get(LAST_PROJECT_KEY);
+
+    request.onsuccess = () => {
+      database.close();
+      resolve(
+        (request.result as BrowserFileSystemDirectoryHandle | undefined) ??
+          null,
+      );
+    };
+
+    request.onerror = () => {
+      database.close();
+      reject(request.error);
+    };
+  });
+}
+
+async function clearLastProjectHandle(): Promise<void> {
+  const database = await openPersistenceDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(
+      PERSISTENCE_STORE_NAME,
+      "readwrite",
+    );
+    const store = transaction.objectStore(PERSISTENCE_STORE_NAME);
+
+    store.delete(LAST_PROJECT_KEY);
+
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
+
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function ensureProjectPermission(
+  handle: BrowserFileSystemDirectoryHandle,
+): Promise<boolean> {
+  const permissionMode = { mode: "readwrite" as const };
+
+  if (!handle.queryPermission && !handle.requestPermission) {
+    return true;
+  }
+
+  if (handle.queryPermission) {
+    const permissionState = await handle.queryPermission(permissionMode);
+
+    if (permissionState === "granted") {
+      return true;
+    }
+  }
+
+  if (handle.requestPermission) {
+    const permissionState = await handle.requestPermission(permissionMode);
+    return permissionState === "granted";
+  }
+
+  return false;
+}
 
 async function buildFolderTree(
   handle: BrowserFileSystemDirectoryHandle,
@@ -149,6 +293,49 @@ export function NavigationSidebar({
     [selectedFolderPath],
   );
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const restoreLastProject = async () => {
+      try {
+        setProjectError(null);
+        setIsOpeningProject(true);
+
+        const lastProjectHandle = await loadLastProjectHandle();
+
+        if (!lastProjectHandle || isCancelled) {
+          return;
+        }
+
+        const hasPermission = await ensureProjectPermission(lastProjectHandle);
+
+        if (!hasPermission || isCancelled) {
+          return;
+        }
+
+        await refreshProjectTree(lastProjectHandle, false);
+      } catch {
+        await clearLastProjectHandle();
+
+        if (!isCancelled) {
+          setProjectError(
+            "Não foi possível restaurar o último projeto aberto.",
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsOpeningProject(false);
+        }
+      }
+    };
+
+    void restoreLastProject();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [refreshProjectTree]);
+
   const handleCreateProject = async () => {
     const browserWindow = window as BrowserWindow;
 
@@ -177,6 +364,7 @@ export function NavigationSidebar({
           create: true,
         });
 
+      await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
     } catch (error) {
       const isUserAbortError =
@@ -203,6 +391,7 @@ export function NavigationSidebar({
       setIsOpeningProject(true);
 
       const projectDirectoryHandle = await browserWindow.showDirectoryPicker();
+      await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
     } catch (error) {
       const isUserAbortError =

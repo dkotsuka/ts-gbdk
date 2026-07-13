@@ -2,11 +2,17 @@ type EditorFile = {
   path: string;
   name: string;
   content: string;
+  savedContent: string;
+  handle: FileSystemFileHandle;
 };
 
 type WorkspaceEditorProps = {
   files: EditorFile[];
   activeFilePath: string | null;
+  isSaving: boolean;
+  saveError: string | null;
+  onChangeFileContent: (filePath: string, content: string) => void;
+  onSaveFile: (filePath: string) => Promise<void>;
   onSelectFile: (filePath: string) => void;
 };
 
@@ -21,10 +27,17 @@ function getEditorLines(content: string): string[] {
 export function WorkspaceEditor({
   files,
   activeFilePath,
+  isSaving,
+  saveError,
+  onChangeFileContent,
+  onSaveFile,
   onSelectFile,
 }: WorkspaceEditorProps) {
   const activeFile = files.find((file) => file.path === activeFilePath) ?? null;
   const lines = activeFile ? getEditorLines(activeFile.content) : [];
+  const hasUnsavedChanges = activeFile
+    ? activeFile.content !== activeFile.savedContent
+    : false;
 
   return (
     <section className="workspace-editor" aria-label="Editor de texto">
@@ -43,6 +56,11 @@ export function WorkspaceEditor({
                 onClick={() => onSelectFile(file.path)}
               >
                 <span>{file.name}</span>
+                {file.content !== file.savedContent ? (
+                  <span className="editor-tab-dirty" aria-hidden="true">
+                    *
+                  </span>
+                ) : null}
               </button>
             );
           })
@@ -52,31 +70,48 @@ export function WorkspaceEditor({
       </div>
 
       {activeFile ? (
-        <div className="editor-surface">
-          <div className="editor-gutter" aria-hidden="true">
-            {lines.map((_, index) => (
-              <div
-                key={`${activeFile.path}-line-${index + 1}`}
-                className="editor-line-number"
-              >
-                {index + 1}
-              </div>
-            ))}
+        <>
+          <div className="editor-toolbar">
+            <div className="editor-toolbar-file">{activeFile.path}</div>
+            <button
+              type="button"
+              className="editor-save-button"
+              onClick={() => {
+                void onSaveFile(activeFile.path);
+              }}
+              disabled={!hasUnsavedChanges || isSaving}
+            >
+              {isSaving ? "Salvando..." : "Salvar"}
+            </button>
           </div>
 
-          <pre className="editor-code" tabIndex={0}>
-            <code>
-              {lines.map((line, index) => (
+          {saveError ? (
+            <div className="editor-save-error">{saveError}</div>
+          ) : null}
+
+          <div className="editor-surface">
+            <div className="editor-gutter" aria-hidden="true">
+              {lines.map((_, index) => (
                 <div
-                  key={`${activeFile.path}-content-${index + 1}`}
-                  className="editor-code-line"
+                  key={`${activeFile.path}-line-${index + 1}`}
+                  className="editor-line-number"
                 >
-                  {line || " "}
+                  {index + 1}
                 </div>
               ))}
-            </code>
-          </pre>
-        </div>
+            </div>
+
+            <textarea
+              className="editor-textarea"
+              spellCheck={false}
+              value={activeFile.content}
+              onChange={(event) => {
+                onChangeFileContent(activeFile.path, event.target.value);
+              }}
+              aria-label={`Editor do arquivo ${activeFile.name}`}
+            />
+          </div>
+        </>
       ) : (
         <div className="editor-empty-state">
           <strong>Abra um arquivo pelo menu de navegação.</strong>
