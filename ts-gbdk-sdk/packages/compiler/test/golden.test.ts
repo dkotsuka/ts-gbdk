@@ -94,6 +94,34 @@ test("let global emits static (mutable)", () =>
     "static uint8_t x = 0;",
   ]));
 
+// ─── 2.1 Arrays ─────────────────────────────────────────────────────────────
+
+console.log("\nArrays");
+
+test("const u8[] global emits static const array", () =>
+  assertC(
+    "const tiles: u8[] = [0x00, 0x7E, 0xFF];\nfunction updateFrame(): void {}",
+    ["static const uint8_t tiles[] = {0, 126, 255};"],
+  ));
+
+test("let u8[] global emits static mutable array", () =>
+  assertC(
+    "let map: u8[] = [1, 2, 3];\nfunction updateFrame(): void {}",
+    ["static uint8_t map[] = {1, 2, 3};"],
+  ));
+
+test("const i16[] global maps to int16_t[]", () =>
+  assertC(
+    "const values: i16[] = [-1, 0, 10];\nfunction updateFrame(): void {}",
+    ["static const int16_t values[] = {-1, 0, 10};"],
+  ));
+
+test("local array declaration emits [] initializer", () =>
+  assertC(
+    "function f(): void { const palette: u16[] = [0x7FFF, 0x03E0]; }\nfunction updateFrame(): void {}",
+    ["uint16_t palette[] = {32767, 992};"],
+  ));
+
 // ─── 3. Expressions ──────────────────────────────────────────────────────────
 
 console.log("\nExpressions");

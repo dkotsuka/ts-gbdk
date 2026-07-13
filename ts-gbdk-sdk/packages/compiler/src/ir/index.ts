@@ -12,6 +12,7 @@ export interface IrVar {
   cType: string;
   name: string;
   isConst: boolean;
+  isArray: boolean;
   init: IrExpr | null;
 }
 
@@ -27,6 +28,7 @@ export type IrExpr =
   | { kind: "num"; value: string }
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; name: string }
+  | { kind: "array"; items: IrExpr[] }
   | { kind: "bin"; op: string; left: IrExpr; right: IrExpr }
   | { kind: "unary"; op: string; operand: IrExpr; prefix: boolean }
   | { kind: "call"; callee: string; args: IrExpr[] }
@@ -43,7 +45,13 @@ export type IrStmt =
       step: IrExpr | null;
       body: IrStmt[];
     }
-  | { kind: "var"; cType: string; name: string; init: IrExpr | null }
+  | {
+      kind: "var";
+      cType: string;
+      name: string;
+      isArray: boolean;
+      init: IrExpr | null;
+    }
   | { kind: "expr"; expr: IrExpr }
   | { kind: "raw"; text: string };
 
@@ -65,6 +73,8 @@ export function emitIrExpr(expr: IrExpr): string {
       return expr.value ? "1" : "0";
     case "ident":
       return expr.name;
+    case "array":
+      return `{${expr.items.map(emitIrExpr).join(", ")}}`;
     case "raw":
       return expr.text;
     case "unary":
@@ -120,10 +130,14 @@ function buildGlobalVars(sf: ts.SourceFile): IrVar[] {
     if (ts.isVariableStatement(stmt)) {
       const isConst = (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0;
       for (const decl of stmt.declarationList.declarations) {
+        const isArray =
+          isArrayTypeNode(decl.type) ||
+          !!(decl.initializer && ts.isArrayLiteralExpression(decl.initializer));
         vars.push({
           cType: mapTsType(decl.type),
           name: ts.isIdentifier(decl.name) ? decl.name.text : "__unknown",
           isConst,
+          isArray,
           init: decl.initializer ? buildExpr(decl.initializer) : null,
         });
       }
@@ -205,6 +219,9 @@ function buildStmt(node: ts.Statement): IrStmt[] {
       kind: "var" as const,
       cType: mapTsType(d.type),
       name: ts.isIdentifier(d.name) ? d.name.text : "__unknown",
+      isArray:
+        isArrayTypeNode(d.type) ||
+        !!(d.initializer && ts.isArrayLiteralExpression(d.initializer)),
       init: d.initializer ? buildExpr(d.initializer) : null,
     }));
   }
@@ -235,6 +252,9 @@ function buildForInitStr(node: ts.ForInitializer): string {
 
 function buildExpr(node: ts.Expression): IrExpr {
   if (ts.isNumericLiteral(node)) return { kind: "num", value: node.text };
+  if (ts.isArrayLiteralExpression(node)) {
+    return { kind: "array", items: node.elements.map((e) => buildExpr(e as ts.Expression)) };
+  }
   if (ts.isStringLiteral(node))
     return { kind: "raw", text: `"${node.text.replace(/"/g, '\\"')}"` };
   if (node.kind === ts.SyntaxKind.TrueKeyword)
@@ -309,6 +329,9 @@ function resolveCallee(expr: ts.Expression): string {
 
 function mapTsType(typeNode: ts.TypeNode | undefined): string {
   if (!typeNode) return "uint8_t";
+  if (ts.isArrayTypeNode(typeNode)) {
+    return mapTsType(typeNode.elementType);
+  }
   if (ts.isTypeReferenceNode(typeNode) && ts.isIdentifier(typeNode.typeName)) {
     switch (typeNode.typeName.text) {
       case "u8":
@@ -330,6 +353,10 @@ function mapTsType(typeNode: ts.TypeNode | undefined): string {
       return "uint16_t";
   }
   return "uint8_t";
+}
+
+function isArrayTypeNode(typeNode: ts.TypeNode | undefined): boolean {
+  return !!typeNode && ts.isArrayTypeNode(typeNode);
 }
 
 function mapBinaryOp(op: ts.BinaryOperator): string {

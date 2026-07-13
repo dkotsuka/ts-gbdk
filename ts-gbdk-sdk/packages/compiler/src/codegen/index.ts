@@ -39,11 +39,19 @@ export function generateC(ir: IrModule): GeneratedArtifacts {
     .map((v) =>
       v.isConst
         ? v.init
-          ? `static const ${v.cType} ${v.name} = ${emitIrExpr(v.init)};`
-          : `static const ${v.cType} ${v.name};`
+          ? v.isArray
+            ? `static const ${v.cType} ${v.name}[] = ${emitIrExpr(v.init)};`
+            : `static const ${v.cType} ${v.name} = ${emitIrExpr(v.init)};`
+          : v.isArray
+            ? `static const ${v.cType} ${v.name}[];`
+            : `static const ${v.cType} ${v.name};`
         : v.init
-          ? `static ${v.cType} ${v.name} = ${emitIrExpr(v.init)};`
-          : `static ${v.cType} ${v.name};`,
+          ? v.isArray
+            ? `static ${v.cType} ${v.name}[] = ${emitIrExpr(v.init)};`
+            : `static ${v.cType} ${v.name} = ${emitIrExpr(v.init)};`
+          : v.isArray
+            ? `static ${v.cType} ${v.name}[];`
+            : `static ${v.cType} ${v.name};`,
     )
     .join("\n");
 
@@ -134,8 +142,12 @@ function emitStmt(stmt: IrStmt, indent: string): string {
 
     case "var":
       return stmt.init
-        ? `${i}${stmt.cType} ${stmt.name} = ${emitIrExpr(stmt.init)};`
-        : `${i}${stmt.cType} ${stmt.name};`;
+        ? stmt.isArray
+          ? `${i}${stmt.cType} ${stmt.name}[] = ${emitIrExpr(stmt.init)};`
+          : `${i}${stmt.cType} ${stmt.name} = ${emitIrExpr(stmt.init)};`
+        : stmt.isArray
+          ? `${i}${stmt.cType} ${stmt.name}[];`
+          : `${i}${stmt.cType} ${stmt.name};`;
 
     case "expr":
       return `${i}${emitIrExpr(stmt.expr)};`;
