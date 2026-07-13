@@ -9,6 +9,9 @@
   --button-bg-hover: #364055;
   --toggle-track: #3a4356;
   --toggle-thumb: #f3f6ff;
+  --sidebar-bg: #151922;
+  --sidebar-border: #2a3240;
+  --sidebar-hover: #242d3d;
 }
 
 :root[data-theme="light"] {
@@ -20,4 +23,7 @@
   --button-bg-hover: #d9e0ed;
   --toggle-track: #c4cddd;
   --toggle-thumb: #ffffff;
+  --sidebar-bg: #eef2f8;
+  --sidebar-border: #d3d8e2;
+  --sidebar-hover: #e2e8f2;
 }

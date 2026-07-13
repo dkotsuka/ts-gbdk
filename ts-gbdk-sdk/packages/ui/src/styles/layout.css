@@ -22,18 +22,43 @@ body {
   color: var(--fg);
 }
 
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+}
+
+.app-main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-header {
-  width: min(960px, 100% - 2rem);
-  margin: 0 auto;
-  padding: 1rem 0;
+  width: 100%;
+  padding: 0.9rem 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .app-title {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+
+.workspace-placeholder {
+  flex: 1;
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-main {
+    min-height: auto;
+  }
 }
