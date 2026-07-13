@@ -12,7 +12,9 @@
     "clean": "tsc -b --clean",
     "dev": "tsc -b -w",
     "lint": "tsc -b --pretty false",
-    "test": "npm run build && npm test --workspace=packages/compiler"
+    "test": "npm run build && npm test --workspace=packages/compiler",
+    "ui:dev": "npm run dev --workspace=packages/ui",
+    "ui:build": "npm run build --workspace=packages/ui"
   },
   "engines": {
     "node": ">=20"
