@@ -2,6 +2,10 @@
   "name": "ts-gbdk-sdk",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "description": "TypeScript SDK that transpiles to C for GBDK-2020",
   "scripts": {
     "build": "tsc -b",

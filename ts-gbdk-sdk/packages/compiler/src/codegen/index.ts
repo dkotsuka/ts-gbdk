@@ -7,6 +7,21 @@ export interface GeneratedArtifacts {
 
 export function generateC(ir: IrModule): GeneratedArtifacts {
   const headerGuard = `${ir.moduleName.toUpperCase()}_H`;
+  const frameCall = ir.frameFunctionName
+    ? `${ir.moduleName}_${ir.frameFunctionName}();`
+    : "vsync();";
+  const userFunctions = ir.functionNames
+    .map((fn) => `void ${ir.moduleName}_${fn}(void);`)
+    .join("\n");
+  const userFunctionBodies = ir.functionNames
+    .map((fn) =>
+      [
+        `void ${ir.moduleName}_${fn}(void) {`,
+        "    // TODO: generated from TypeScript body in next milestone.",
+        "}",
+      ].join("\n"),
+    )
+    .join("\n\n");
 
   const headerSource = [
     `#ifndef ${headerGuard}`,
@@ -15,6 +30,7 @@ export function generateC(ir: IrModule): GeneratedArtifacts {
     "#include <stdint.h>",
     "",
     `void ${ir.moduleName}_update(void);`,
+    userFunctions,
     "",
     "#endif",
   ].join("\n");
@@ -24,8 +40,11 @@ export function generateC(ir: IrModule): GeneratedArtifacts {
     "#include <stdint.h>",
     `#include \"${ir.moduleName}.h\"`,
     "",
+    userFunctionBodies,
+    userFunctionBodies ? "" : "",
     `void ${ir.moduleName}_update(void) {`,
-    "    vsync();",
+    `    ${frameCall}`,
+    ir.frameFunctionName ? "    vsync();" : "",
     "}",
     "",
     "void main(void) {",

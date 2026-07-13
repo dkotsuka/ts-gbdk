@@ -13,6 +13,6 @@
     "clean": "tsc -b --clean"
   },
   "dependencies": {
-    "@ts-gbdk/compiler": "workspace:*"
+    "@ts-gbdk/compiler": "0.1.0"
   }
 }
