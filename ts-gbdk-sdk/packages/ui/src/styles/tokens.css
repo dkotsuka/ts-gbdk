@@ -1,0 +1,23 @@
+:root {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color-scheme: dark light;
+  --bg: #0f1115;
+  --fg: #e6e8ee;
+  --surface: #171a21;
+  --border: #2c3240;
+  --button-bg: #2a3140;
+  --button-bg-hover: #364055;
+  --toggle-track: #3a4356;
+  --toggle-thumb: #f3f6ff;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f7fb;
+  --fg: #1d2430;
+  --surface: #ffffff;
+  --border: #d3d8e2;
+  --button-bg: #e6ebf4;
+  --button-bg-hover: #d9e0ed;
+  --toggle-track: #c4cddd;
+  --toggle-thumb: #ffffff;
+}
