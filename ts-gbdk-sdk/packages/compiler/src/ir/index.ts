@@ -254,7 +254,10 @@ function buildExpr(node: ts.Expression): IrExpr {
   }
   if (ts.isPrefixUnaryExpression(node)) {
     // Collapse -(number) into a single negative numeric literal for clean C output
-    if (node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand)) {
+    if (
+      node.operator === ts.SyntaxKind.MinusToken &&
+      ts.isNumericLiteral(node.operand)
+    ) {
       return { kind: "num", value: `-${node.operand.text}` };
     }
     return {

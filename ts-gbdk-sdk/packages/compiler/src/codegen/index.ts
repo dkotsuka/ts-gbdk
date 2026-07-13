@@ -38,8 +38,12 @@ export function generateC(ir: IrModule): GeneratedArtifacts {
   const globalLines = ir.globalVars
     .map((v) =>
       v.isConst
-        ? (v.init ? `static const ${v.cType} ${v.name} = ${emitIrExpr(v.init)};` : `static const ${v.cType} ${v.name};`)
-        : (v.init ? `static ${v.cType} ${v.name} = ${emitIrExpr(v.init)};` : `static ${v.cType} ${v.name};`),
+        ? v.init
+          ? `static const ${v.cType} ${v.name} = ${emitIrExpr(v.init)};`
+          : `static const ${v.cType} ${v.name};`
+        : v.init
+          ? `static ${v.cType} ${v.name} = ${emitIrExpr(v.init)};`
+          : `static ${v.cType} ${v.name};`,
     )
     .join("\n");
 

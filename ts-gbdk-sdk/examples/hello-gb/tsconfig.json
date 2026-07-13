@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "types": ["node"],
+    "typeRoots": ["../../node_modules/@types"],
+    "paths": {
+      "@ts-gbdk/types": ["../../packages/types/index.d.ts"]
+    }
+  },
+  "include": [
+    "../../packages/types/index.d.ts",
+    "src/**/*.ts"
+  ]
+}
