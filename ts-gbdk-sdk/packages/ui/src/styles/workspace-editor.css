@@ -1,0 +1,104 @@
+.workspace-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--editor-bg);
+}
+
+.editor-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar-bg);
+}
+
+.editor-tab,
+.editor-empty-tab {
+  min-width: 9rem;
+  border: 0;
+  background: var(--editor-tab-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.83rem;
+  padding: 0.72rem 0.95rem;
+  text-align: left;
+}
+
+.editor-tab {
+  cursor: pointer;
+}
+
+.editor-tab:hover {
+  background: var(--editor-tab-active);
+}
+
+.editor-tab.is-active {
+  background: var(--editor-tab-active);
+  box-shadow: inset 0 2px 0 #4ea1ff;
+}
+
+.editor-empty-tab {
+  color: var(--editor-gutter);
+}
+
+.editor-surface {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  overflow: auto;
+}
+
+.editor-gutter {
+  padding: 1rem 0.75rem 1rem 1rem;
+  border-right: 1px solid var(--border);
+  color: var(--editor-gutter);
+  text-align: right;
+  user-select: none;
+}
+
+.editor-line-number,
+.editor-code-line {
+  min-height: 1.55rem;
+  line-height: 1.55rem;
+  white-space: pre;
+}
+
+.editor-code {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  color: var(--editor-code);
+  overflow: visible;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 0.89rem;
+}
+
+.editor-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 2rem;
+  color: var(--editor-gutter);
+  text-align: center;
+}
+
+.editor-empty-state strong {
+  color: var(--fg);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 860px) {
+  .workspace-editor {
+    min-height: 60vh;
+  }
+
+  .editor-code {
+    padding-right: 1rem;
+  }
+}

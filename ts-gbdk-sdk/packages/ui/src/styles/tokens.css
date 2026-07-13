@@ -12,6 +12,11 @@
   --sidebar-bg: #151922;
   --sidebar-border: #2a3240;
   --sidebar-hover: #242d3d;
+  --editor-bg: #11161f;
+  --editor-tab-bg: #1b2330;
+  --editor-tab-active: #222d3c;
+  --editor-gutter: #7d8798;
+  --editor-code: #dce3f2;
 }
 
 :root[data-theme="light"] {
@@ -26,4 +31,9 @@
   --sidebar-bg: #eef2f8;
   --sidebar-border: #d3d8e2;
   --sidebar-hover: #e2e8f2;
+  --editor-bg: #f8fafc;
+  --editor-tab-bg: #edf2f7;
+  --editor-tab-active: #ffffff;
+  --editor-gutter: #637083;
+  --editor-code: #1a2433;
 }

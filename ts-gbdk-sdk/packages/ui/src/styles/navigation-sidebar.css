@@ -141,6 +141,11 @@
 }
 
 .nav-file-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -149,6 +154,18 @@
   padding-top: 0.28rem;
   padding-bottom: 0.28rem;
   padding-right: 0.45rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nav-file-item:hover {
+  background: var(--sidebar-hover);
+}
+
+.nav-file-item.is-active {
+  background: var(--sidebar-hover);
+  outline: 1px solid var(--sidebar-border);
 }
 
 .nav-create-project {

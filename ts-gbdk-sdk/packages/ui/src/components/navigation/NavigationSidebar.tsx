@@ -24,7 +24,7 @@ type BrowserFileSystemDirectoryHandle = {
   getFileHandle: (
     name: string,
     options?: { create?: boolean },
-  ) => Promise<unknown>;
+  ) => Promise<FileSystemFileHandle>;
 };
 
 type BrowserWindow = Window & {
@@ -36,7 +36,22 @@ type FolderNode = {
   name: string;
   handle: BrowserFileSystemDirectoryHandle;
   folders: FolderNode[];
-  files: string[];
+  files: FileNode[];
+};
+
+type FileNode = {
+  path: string;
+  name: string;
+  handle: FileSystemFileHandle;
+};
+
+type NavigationSidebarProps = {
+  activeFilePath: string | null;
+  onOpenFile: (
+    filePath: string,
+    fileName: string,
+    fileHandle: FileSystemFileHandle,
+  ) => Promise<void>;
 };
 
 async function buildFolderTree(
@@ -45,7 +60,7 @@ async function buildFolderTree(
 ): Promise<FolderNode> {
   const path = parentPath ? `${parentPath}/${handle.name}` : handle.name;
   const folders: FolderNode[] = [];
-  const files: string[] = [];
+  const files: FileNode[] = [];
 
   for await (const entry of handle.values()) {
     if (entry.kind === "directory") {
@@ -56,12 +71,17 @@ async function buildFolderTree(
     }
 
     if (entry.name.endsWith(".ts")) {
-      files.push(entry.name);
+      const fileHandle = await handle.getFileHandle(entry.name);
+      files.push({
+        path: `${path}/${entry.name}`,
+        name: entry.name,
+        handle: fileHandle,
+      });
     }
   }
 
   folders.sort((a, b) => a.name.localeCompare(b.name));
-  files.sort((a, b) => a.localeCompare(b));
+  files.sort((a, b) => a.name.localeCompare(b.name));
 
   return { path, name: handle.name, handle, folders, files };
 }
@@ -88,7 +108,10 @@ function findFolderByPath(
   return null;
 }
 
-export function NavigationSidebar() {
+export function NavigationSidebar({
+  activeFilePath,
+  onOpenFile,
+}: NavigationSidebarProps) {
   const [projectRoot, setProjectRoot] = useState<FolderNode | null>(null);
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(
     null,
@@ -256,6 +279,15 @@ export function NavigationSidebar() {
     }
   };
 
+  const handleOpenTsFile = async (file: FileNode) => {
+    try {
+      setProjectError(null);
+      await onOpenFile(file.path, file.name, file.handle);
+    } catch {
+      setProjectError("Não foi possível abrir o arquivo selecionado.");
+    }
+  };
+
   const renderFolderNode = (folder: FolderNode, depth = 0): JSX.Element => {
     const isSelected = selectedFolderPath === folder.path;
 
@@ -275,15 +307,19 @@ export function NavigationSidebar() {
           renderFolderNode(childFolder, depth + 1),
         )}
 
-        {folder.files.map((fileName) => (
-          <div
-            key={`${folder.path}/${fileName}`}
-            className="nav-file-item"
+        {folder.files.map((file) => (
+          <button
+            key={file.path}
+            type="button"
+            className={`nav-file-item${activeFilePath === file.path ? " is-active" : ""}`}
             style={{ paddingLeft: `${2.25 + depth * 0.9}rem` }}
+            onClick={() => {
+              void handleOpenTsFile(file);
+            }}
           >
             <FiFile aria-hidden="true" />
-            <span>{fileName}</span>
-          </div>
+            <span>{file.name}</span>
+          </button>
         ))}
       </div>
     );
