@@ -37,7 +37,9 @@ export function generateC(ir: IrModule): GeneratedArtifacts {
   // C source: globals, user function bodies, update wrapper, main
   const globalLines = ir.globalVars
     .map((v) =>
-      v.init ? `static ${v.cType} ${v.name} = ${emitIrExpr(v.init)};` : `static ${v.cType} ${v.name};`,
+      v.isConst
+        ? (v.init ? `static const ${v.cType} ${v.name} = ${emitIrExpr(v.init)};` : `static const ${v.cType} ${v.name};`)
+        : (v.init ? `static ${v.cType} ${v.name} = ${emitIrExpr(v.init)};` : `static ${v.cType} ${v.name};`),
     )
     .join("\n");
 
@@ -90,7 +92,7 @@ function emitStmts(stmts: IrStmt[], indent: string): string {
 }
 
 function emitStmt(stmt: IrStmt, indent: string): string {
-  const i  = indent;
+  const i = indent;
   const i2 = indent + "    ";
 
   switch (stmt.kind) {

@@ -9,10 +9,10 @@ let playerX: u8 = 80;
 let playerY: u8 = 72;
 
 const SPEED: u8 = 1;
-const J_LEFT:  u8 = 0x20;
+const J_LEFT: u8 = 0x20;
 const J_RIGHT: u8 = 0x10;
-const J_UP:    u8 = 0x40;
-const J_DOWN:  u8 = 0x80;
+const J_UP: u8 = 0x40;
+const J_DOWN: u8 = 0x80;
 
 function clamp(val: u8, min: u8, max: u8): u8 {
   if (val < min) {

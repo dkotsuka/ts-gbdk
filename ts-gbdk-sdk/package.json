@@ -11,7 +11,8 @@
     "build": "tsc -b",
     "clean": "tsc -b --clean",
     "dev": "tsc -b -w",
-    "lint": "tsc -b --pretty false"
+    "lint": "tsc -b --pretty false",
+    "test": "npm run build && npm test --workspace=packages/compiler"
   },
   "engines": {
     "node": ">=20"
