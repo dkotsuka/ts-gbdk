@@ -9,8 +9,5 @@
       "@ts-gbdk/types": ["../../packages/types/index.d.ts"]
     }
   },
-  "include": [
-    "../../packages/types/index.d.ts",
-    "src/**/*.ts"
-  ]
+  "include": ["../../packages/types/index.d.ts", "src/**/*.ts"]
 }

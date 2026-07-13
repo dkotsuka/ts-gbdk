@@ -6,8 +6,8 @@
 //   i16 -> int16_t
 //   bool is native TypeScript – no alias needed.
 
-declare type u8  = number;
-declare type i8  = number;
+declare type u8 = number;
+declare type i8 = number;
 declare type u16 = number;
 declare type i16 = number;
 
