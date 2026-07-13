@@ -37,7 +37,12 @@ function init(projectName: string, parentDir: string): number {
   }
 
   // Resolve the SDK root (two levels up from this file: packages/cli/dist -> sdk root)
-  const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const sdkRoot = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "..",
+  );
 
   mkdirSync(join(projectDir, "src"), { recursive: true });
   mkdirSync(join(projectDir, "assets"), { recursive: true });
@@ -45,11 +50,19 @@ function init(projectName: string, parentDir: string): number {
   mkdirSync(join(projectDir, "gbdk-out", "build"), { recursive: true });
 
   // src/game.ts
-  writeFileSync(join(projectDir, "src", "game.ts"), gameTemplate(projectName), "utf8");
+  writeFileSync(
+    join(projectDir, "src", "game.ts"),
+    gameTemplate(projectName),
+    "utf8",
+  );
 
   // tsconfig.json – paths relative to the new project dir pointing into the SDK
   const relToSdk = relative(projectDir, sdkRoot).replace(/\\/g, "/");
-  writeFileSync(join(projectDir, "tsconfig.json"), tsconfigTemplate(relToSdk), "utf8");
+  writeFileSync(
+    join(projectDir, "tsconfig.json"),
+    tsconfigTemplate(relToSdk),
+    "utf8",
+  );
 
   // package.json
   writeFileSync(

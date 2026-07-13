@@ -35,17 +35,17 @@ A ROM gerada ficara em `gbdk-out/build/meu-jogo.gb`.
 
 ## Subconjunto TypeScript suportado
 
-| Construto TS              | C gerado                        |
-|---------------------------|---------------------------------|
-| `let x: u8 = 0`           | `static uint8_t x = 0;`         |
-| `const N: u8 = 4`         | `static const uint8_t N = 4;`   |
-| `function f(a: u8): u16`  | `uint16_t mod_f(uint8_t a)`     |
-| `if / else`               | `if / else`                     |
-| `while`                   | `while`                         |
-| `for (let i: u8 = 0; ...)` | `for (uint8_t i = 0; ...)`     |
-| `a & b`, `a !== b`, `a++` | operadores C diretos            |
-| `localFn()`               | `module_localFn()` (mangling)   |
-| `declare function vsync()`| chamada externa sem corpo       |
+| Construto TS               | C gerado                      |
+| -------------------------- | ----------------------------- |
+| `let x: u8 = 0`            | `static uint8_t x = 0;`       |
+| `const N: u8 = 4`          | `static const uint8_t N = 4;` |
+| `function f(a: u8): u16`   | `uint16_t mod_f(uint8_t a)`   |
+| `if / else`                | `if / else`                   |
+| `while`                    | `while`                       |
+| `for (let i: u8 = 0; ...)` | `for (uint8_t i = 0; ...)`    |
+| `a & b`, `a !== b`, `a++`  | operadores C diretos          |
+| `localFn()`                | `module_localFn()` (mangling) |
+| `declare function vsync()` | chamada externa sem corpo     |
 
 **Tipos:** `u8` → `uint8_t`, `i8` → `int8_t`, `u16` → `uint16_t`, `i16` → `int16_t`, `bool` → `uint8_t`, `void` → `void`.
 
@@ -54,13 +54,13 @@ Qualquer recurso fora do subconjunto gera um erro `TSGBDKxxx` com arquivo e linh
 
 ## Pacotes
 
-| Pacote | Descricao |
-|--------|-----------|
-| `packages/compiler` | Parser TS, validador, IR e codegen C |
-| `packages/types` | Declaracoes globais `u8`, `i8`, `u16`, `i16` |
-| `packages/runtime-c` | Runtime C com wrappers para GBDK |
-| `packages/cli` | CLI: `init`, `transpile`, `build` |
-| `examples/hello-gb` | Exemplo de jogo com input e sprite |
+| Pacote               | Descricao                                    |
+| -------------------- | -------------------------------------------- |
+| `packages/compiler`  | Parser TS, validador, IR e codegen C         |
+| `packages/types`     | Declaracoes globais `u8`, `i8`, `u16`, `i16` |
+| `packages/runtime-c` | Runtime C com wrappers para GBDK             |
+| `packages/cli`       | CLI: `init`, `transpile`, `build`            |
+| `examples/hello-gb`  | Exemplo de jogo com input e sprite           |
 
 ## Comandos do workspace
 
