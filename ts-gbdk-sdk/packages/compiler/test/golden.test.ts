@@ -105,10 +105,9 @@ test("const u8[] global emits static const array", () =>
   ));
 
 test("let u8[] global emits static mutable array", () =>
-  assertC(
-    "let map: u8[] = [1, 2, 3];\nfunction updateFrame(): void {}",
-    ["static uint8_t map[] = {1, 2, 3};"],
-  ));
+  assertC("let map: u8[] = [1, 2, 3];\nfunction updateFrame(): void {}", [
+    "static uint8_t map[] = {1, 2, 3};",
+  ]));
 
 test("const i16[] global maps to int16_t[]", () =>
   assertC(

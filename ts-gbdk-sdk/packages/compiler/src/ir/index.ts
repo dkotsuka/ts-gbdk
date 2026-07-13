@@ -253,7 +253,10 @@ function buildForInitStr(node: ts.ForInitializer): string {
 function buildExpr(node: ts.Expression): IrExpr {
   if (ts.isNumericLiteral(node)) return { kind: "num", value: node.text };
   if (ts.isArrayLiteralExpression(node)) {
-    return { kind: "array", items: node.elements.map((e) => buildExpr(e as ts.Expression)) };
+    return {
+      kind: "array",
+      items: node.elements.map((e) => buildExpr(e as ts.Expression)),
+    };
   }
   if (ts.isStringLiteral(node))
     return { kind: "raw", text: `"${node.text.replace(/"/g, '\\"')}"` };
