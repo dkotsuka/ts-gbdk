@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { compileToC } from "@ts-gbdk/compiler";
 import {
   FiBookOpen,
+  FiFile,
   FiFilePlus,
   FiFolder,
   FiFolderPlus,
   FiPlus,
+  FiPlay,
   FiTrash2,
   FiX,
 } from "react-icons/fi";
-import { OutputFolderTree } from "./OutputFolderTree";
 import { ProjectFolderTree } from "./ProjectFolderTree";
 import type {
   BrowserFileSystemDirectoryHandle,
@@ -32,11 +34,150 @@ type NavigationSidebarProps = {
   ) => Promise<void>;
 };
 
+type CompileTarget = "gb" | "gbc";
+type BuildBumpType = "major" | "minor" | "path";
+
 const OUTPUT_FOLDER_NAME = "gbdk-out";
+const BUILD_API_BASE_URL =
+  import.meta.env.VITE_BUILD_API_BASE_URL ?? "http://127.0.0.1:4174";
 
 const PERSISTENCE_DB_NAME = "ts-gbdk-ui-workspace";
 const PERSISTENCE_STORE_NAME = "workspace";
 const LAST_PROJECT_KEY = "last-project-handle";
+
+type NativeBuildResponse = {
+  ok: boolean;
+  exitCode?: number;
+  logs?: string[];
+  artifactPath?: string | null;
+  error?: string;
+};
+
+function makefileTemplate(projectName: string): string {
+  return [
+    "ifndef GBDK_HOME",
+    "$(error Please set GBDK_HOME to your GBDK root path)",
+    "endif",
+    "",
+    "LCC = $(GBDK_HOME)/bin/lcc",
+    `PROJECTNAME = ${projectName}`,
+    "CSOURCES = $(wildcard src/*.c)",
+    "",
+    "all: gb",
+    "",
+    "gb:",
+    "\t$(LCC) -o build/$(PROJECTNAME).gb $(CSOURCES)",
+    "",
+    "gbc:",
+    "\t$(LCC) -Wm-yC -o build/$(PROJECTNAME).gbc $(CSOURCES)",
+    "",
+    "clean:",
+    "\trm -f build/*.gb build/*.gbc build/*.ihx build/*.map build/*.sym src/*.o",
+    "",
+  ].join("\n");
+}
+
+async function writeTextFile(
+  folderHandle: BrowserFileSystemDirectoryHandle,
+  fileName: string,
+  content: string,
+): Promise<void> {
+  const fileHandle = await folderHandle.getFileHandle(fileName, {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+async function compileProjectMain(
+  rootHandle: BrowserFileSystemDirectoryHandle,
+  rootPath: string,
+  target: CompileTarget,
+  outputBaseName: string,
+  appendLog: (entry: string) => void,
+): Promise<{ diagnostics: string[] }> {
+  appendLog("[1/6] Lendo src/main.ts...");
+  const srcHandle = await rootHandle.getDirectoryHandle("src");
+  const mainFileHandle = await srcHandle.getFileHandle("main.ts");
+  const mainFile = await mainFileHandle.getFile();
+  const source = await mainFile.text();
+
+  appendLog("[2/6] Transpilando TypeScript para C...");
+  const compileResult = compileToC({
+    filePath: `${rootPath}/src/main.ts`,
+    source,
+  });
+
+  appendLog("[3/6] Preparando diretórios de saída...");
+  const outHandle = await rootHandle.getDirectoryHandle(OUTPUT_FOLDER_NAME, {
+    create: true,
+  });
+  const outSrcHandle = await outHandle.getDirectoryHandle("src", {
+    create: true,
+  });
+  const outBuildHandle = await outHandle.getDirectoryHandle("build", {
+    create: true,
+  });
+
+  appendLog("[4/6] Gravando arquivos C gerados...");
+  await writeTextFile(outSrcHandle, "main.c", compileResult.cSource);
+  await writeTextFile(outSrcHandle, "main.h", compileResult.headerSource);
+  await writeTextFile(outHandle, "Makefile", makefileTemplate(outputBaseName));
+
+  appendLog(
+    `[5/6] Preparando comando de build para alvo ${target.toUpperCase()}...`,
+  );
+  const buildCommand = target === "gbc" ? "make gbc" : "make gb";
+
+  await writeTextFile(outBuildHandle, "build-command.txt", `${buildCommand}\n`);
+
+  appendLog("[6/6] Artefatos prontos em gbdk-out/.\n");
+
+  return { diagnostics: compileResult.diagnostics };
+}
+
+async function runNativeBuild(
+  projectDir: string,
+  target: CompileTarget,
+): Promise<NativeBuildResponse> {
+  const response = await fetch(`${BUILD_API_BASE_URL}/api/build`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ projectDir, target }),
+  });
+
+  if (!response.ok) {
+    const errorPayload = (await response
+      .json()
+      .catch(() => ({ error: "Falha ao chamar serviço de build." }))) as {
+      error?: string;
+    };
+
+    throw new Error(errorPayload.error ?? "Falha ao chamar serviço de build.");
+  }
+
+  return (await response.json()) as NativeBuildResponse;
+}
+
+function bumpVersion(version: string, bumpType: BuildBumpType): string {
+  const parts = version.split(".");
+  const major = Number(parts[0] ?? 0);
+  const minor = Number(parts[1] ?? 0);
+  const patch = Number(parts[2] ?? 0);
+
+  if (bumpType === "major") {
+    return `${major + 1}.0.0`;
+  }
+
+  if (bumpType === "minor") {
+    return `${major}.${minor + 1}.0`;
+  }
+
+  return `${major}.${minor}.${patch + 1}`;
+}
 
 function openPersistenceDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -174,7 +315,9 @@ async function ensureProjectPermission(
 async function createProjectScaffold(
   rootHandle: BrowserFileSystemDirectoryHandle,
 ): Promise<void> {
-  await rootHandle.getDirectoryHandle("src", { create: true });
+  const srcHandle = await rootHandle.getDirectoryHandle("src", {
+    create: true,
+  });
   await rootHandle.getDirectoryHandle("assets", { create: true });
 
   const gbdkOutHandle = await rootHandle.getDirectoryHandle("gbdk-out", {
@@ -183,6 +326,32 @@ async function createProjectScaffold(
 
   await gbdkOutHandle.getDirectoryHandle("src", { create: true });
   await gbdkOutHandle.getDirectoryHandle("build", { create: true });
+
+  try {
+    await srcHandle.getFileHandle("main.ts");
+  } catch {
+    const mainFileHandle = await srcHandle.getFileHandle("main.ts", {
+      create: true,
+    });
+    const writable = await mainFileHandle.createWritable();
+    await writable.write(
+      [
+        "// main.ts - projeto gerado pelo ts-gbdk-sdk UI",
+        "// Hello World mínimo compilável para começar.",
+        "",
+        "declare function vsync(): void;",
+        "",
+        "function helloWorld(): void {}",
+        "",
+        "function updateFrame(): void {",
+        "  helloWorld();",
+        "  vsync();",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writable.close();
+  }
 }
 
 async function buildFolderTree(
@@ -271,6 +440,23 @@ function collectFolderFilePaths(folder: FolderNode): string[] {
   return [...currentFilePaths, ...childFilePaths];
 }
 
+function collectRomFiles(folder: FolderNode | null): FileNode[] {
+  if (!folder) {
+    return [];
+  }
+
+  const currentRomFiles = folder.files.filter(
+    (file) => file.name.endsWith(".gb") || file.name.endsWith(".gbc"),
+  );
+  const childRomFiles = folder.folders.flatMap((child) =>
+    collectRomFiles(child),
+  );
+
+  return [...currentRomFiles, ...childRomFiles].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
 export function NavigationSidebar({
   activeFilePath,
   onCloseProject,
@@ -285,11 +471,29 @@ export function NavigationSidebar({
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isOpeningProject, setIsOpeningProject] = useState(false);
   const [isUpdatingTree, setIsUpdatingTree] = useState(false);
+  const [isCompilingProject, setIsCompilingProject] = useState(false);
+  const [compileTarget, setCompileTarget] = useState<CompileTarget>("gb");
+  const [buildBumpType, setBuildBumpType] = useState<BuildBumpType>("path");
+  const [buildVersion, setBuildVersion] = useState("0.0.0");
+  const [projectSystemPath, setProjectSystemPath] = useState<string | null>(
+    null,
+  );
+  const [compileLogs, setCompileLogs] = useState<string[]>([]);
   const [projectError, setProjectError] = useState<string | null>(null);
+  const [projectStatus, setProjectStatus] = useState<string | null>(null);
+
+  const appendCompileLog = useCallback((entry: string) => {
+    setCompileLogs((current) => [...current, entry]);
+  }, []);
 
   const selectedFolder = useMemo(
     () => findFolderByPath(projectRoot, selectedFolderPath),
     [projectRoot, selectedFolderPath],
+  );
+
+  const outputRomFiles = useMemo(
+    () => collectRomFiles(outputRoot),
+    [outputRoot],
   );
 
   const isSelectedRootFolder = useMemo(() => {
@@ -387,6 +591,7 @@ export function NavigationSidebar({
 
     if (!browserWindow.showDirectoryPicker) {
       setProjectError("Seu navegador não suporta criação de pasta local.");
+      setProjectStatus(null);
       return;
     }
 
@@ -402,6 +607,7 @@ export function NavigationSidebar({
 
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsCreatingProject(true);
 
       const parentDirectoryHandle = await browserWindow.showDirectoryPicker();
@@ -413,6 +619,7 @@ export function NavigationSidebar({
       await createProjectScaffold(projectDirectoryHandle);
       await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
+      setProjectSystemPath(null);
     } catch (error) {
       const isUserAbortError =
         error instanceof DOMException && error.name === "AbortError";
@@ -430,16 +637,19 @@ export function NavigationSidebar({
 
     if (!browserWindow.showDirectoryPicker) {
       setProjectError("Seu navegador não suporta abertura de pasta local.");
+      setProjectStatus(null);
       return;
     }
 
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsOpeningProject(true);
 
       const projectDirectoryHandle = await browserWindow.showDirectoryPicker();
       await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
+      setProjectSystemPath(null);
     } catch (error) {
       const isUserAbortError =
         error instanceof DOMException && error.name === "AbortError";
@@ -455,11 +665,14 @@ export function NavigationSidebar({
   const handleCloseProject = async () => {
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsOpeningProject(true);
       await clearLastProjectHandle();
       setProjectRoot(null);
       setOutputRoot(null);
       setSelectedFolderPath(null);
+      setProjectSystemPath(null);
+      setBuildVersion("0.0.0");
       onCloseProject();
     } catch {
       setProjectError("Não foi possível fechar o projeto atual.");
@@ -482,6 +695,7 @@ export function NavigationSidebar({
 
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsUpdatingTree(true);
       await selectedFolder.handle.getDirectoryHandle(folderName, {
         create: true,
@@ -518,6 +732,7 @@ export function NavigationSidebar({
 
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsUpdatingTree(true);
       await selectedFolder.handle.getFileHandle(fileName, { create: true });
       const rootHandle = projectRoot?.handle;
@@ -534,6 +749,7 @@ export function NavigationSidebar({
   const handleOpenTsFile = async (file: FileNode) => {
     try {
       setProjectError(null);
+      setProjectStatus(null);
       await onOpenFile(file.path, file.name, file.handle);
     } catch {
       setProjectError("Não foi possível abrir o arquivo selecionado.");
@@ -551,6 +767,7 @@ export function NavigationSidebar({
 
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsUpdatingTree(true);
       await parentFolder.handle.removeEntry(file.name);
       onDeleteFile(file.path);
@@ -577,6 +794,7 @@ export function NavigationSidebar({
 
     if (!parentFolder) {
       setProjectError("Não foi possível localizar a pasta pai para deletar.");
+      setProjectStatus(null);
       return;
     }
 
@@ -595,6 +813,7 @@ export function NavigationSidebar({
 
     try {
       setProjectError(null);
+      setProjectStatus(null);
       setIsUpdatingTree(true);
 
       await parentFolder.handle.removeEntry(selectedFolder.name, {
@@ -611,6 +830,99 @@ export function NavigationSidebar({
       setProjectError("Não foi possível deletar a pasta selecionada.");
     } finally {
       setIsUpdatingTree(false);
+    }
+  };
+
+  const handleCompileProject = async () => {
+    if (!projectRoot) {
+      return;
+    }
+
+    const nextVersion = bumpVersion(buildVersion, buildBumpType);
+    const outputBaseName = `${projectRoot.name}-v${nextVersion}`;
+
+    let localProjectPath = projectSystemPath;
+    if (!localProjectPath) {
+      const suggestedPath = `${projectRoot.name}`;
+      const pathInput = window.prompt(
+        "Informe o caminho absoluto local do projeto para executar o Makefile:",
+        suggestedPath,
+      );
+
+      if (!pathInput?.trim()) {
+        setProjectError("Compilação cancelada: caminho local não informado.");
+        return;
+      }
+
+      localProjectPath = pathInput.trim();
+      setProjectSystemPath(localProjectPath);
+    }
+
+    try {
+      setProjectError(null);
+      setProjectStatus(null);
+      setCompileLogs([]);
+      setIsCompilingProject(true);
+
+      appendCompileLog(
+        `Iniciando compilação do projeto '${projectRoot.name}' para ${compileTarget.toUpperCase()} (${buildBumpType} -> v${nextVersion})...`,
+      );
+
+      const compileResult = await compileProjectMain(
+        projectRoot.handle,
+        projectRoot.path,
+        compileTarget,
+        outputBaseName,
+        appendCompileLog,
+      );
+
+      appendCompileLog("[7/8] Executando Makefile local...");
+      const nativeBuildResult = await runNativeBuild(
+        localProjectPath,
+        compileTarget,
+      );
+
+      for (const logEntry of nativeBuildResult.logs ?? []) {
+        appendCompileLog(logEntry);
+      }
+
+      if (!nativeBuildResult.ok) {
+        throw new Error(
+          `Build nativo falhou (exit code ${nativeBuildResult.exitCode ?? 1}).`,
+        );
+      }
+
+      appendCompileLog("[8/8] Build concluído pelo Makefile.");
+
+      await refreshProjectTree(projectRoot.handle);
+      setBuildVersion(nextVersion);
+
+      if (compileResult.diagnostics.length > 0) {
+        for (const diagnostic of compileResult.diagnostics) {
+          appendCompileLog(`Aviso: ${diagnostic}`);
+        }
+        setProjectStatus(
+          `Compilação concluída com ${compileResult.diagnostics.length} aviso(s).`,
+        );
+      } else {
+        setProjectStatus(
+          `Compilação concluída com sucesso. Artefato: ${outputBaseName}.${compileTarget}`,
+        );
+      }
+
+      if (nativeBuildResult.artifactPath) {
+        appendCompileLog(`ROM gerado: ${nativeBuildResult.artifactPath}`);
+      }
+    } catch (error) {
+      setProjectError(
+        "Não foi possível compilar. Verifique o caminho local, GBDK_HOME e o conteúdo de src/main.ts.",
+      );
+      if (error instanceof Error) {
+        appendCompileLog(`Erro: ${error.message}`);
+      }
+      appendCompileLog("Falha na compilação. Confira os detalhes acima.");
+    } finally {
+      setIsCompilingProject(false);
     }
   };
 
@@ -649,7 +961,9 @@ export function NavigationSidebar({
                 type="button"
                 className="nav-icon-action"
                 onClick={handleCreateChildFolder}
-                disabled={isUpdatingTree || !selectedFolder}
+                disabled={
+                  isUpdatingTree || isCompilingProject || !selectedFolder
+                }
                 title="Nova pasta"
                 aria-label="Nova pasta"
               >
@@ -659,7 +973,9 @@ export function NavigationSidebar({
                 type="button"
                 className="nav-icon-action"
                 onClick={handleCreateTsFile}
-                disabled={isUpdatingTree || !selectedFolder}
+                disabled={
+                  isUpdatingTree || isCompilingProject || !selectedFolder
+                }
                 title="Novo arquivo"
                 aria-label="Novo arquivo"
               >
@@ -672,7 +988,10 @@ export function NavigationSidebar({
                   void handleDeleteFolder();
                 }}
                 disabled={
-                  isUpdatingTree || !selectedFolder || isSelectedRootFolder
+                  isUpdatingTree ||
+                  isCompilingProject ||
+                  !selectedFolder ||
+                  isSelectedRootFolder
                 }
                 title={
                   isSelectedRootFolder
@@ -736,13 +1055,125 @@ export function NavigationSidebar({
         {projectError ? (
           <div className="nav-error-text">{projectError}</div>
         ) : null}
+
+        {projectStatus ? (
+          <div className="nav-status-text">{projectStatus}</div>
+        ) : null}
       </SidebarSection>
 
-      {outputRoot ? (
+      {projectRoot ? (
         <SidebarSection title="Saída">
-          <div className="nav-tree-wrapper">
-            <OutputFolderTree root={outputRoot} />
+          <div className="nav-output-list">
+            {outputRomFiles.length > 0 ? (
+              outputRomFiles.map((file) => (
+                <div key={file.path} className="nav-item nav-output-item">
+                  <FiFile aria-hidden="true" />
+                  <span>{file.name}</span>
+                </div>
+              ))
+            ) : (
+              <div className="nav-output-empty">
+                Nenhum arquivo .gb/.gbc encontrado.
+              </div>
+            )}
           </div>
+
+          <div className="nav-output-build-controls">
+            <div className="nav-compile-controls">
+              <label className="nav-compile-label" htmlFor="compile-target">
+                Alvo de ROM:
+              </label>
+              <select
+                id="compile-target"
+                className="nav-compile-select"
+                value={compileTarget}
+                onChange={(event) => {
+                  setCompileTarget(event.target.value as CompileTarget);
+                }}
+                disabled={isCompilingProject}
+                aria-label="Selecionar alvo de ROM"
+                title="Selecionar alvo de ROM"
+              >
+                <option value="gb">GB (.gb)</option>
+                <option value="gbc">GBC (.gbc)</option>
+              </select>
+
+              <button
+                type="button"
+                className="nav-icon-action"
+                onClick={() => {
+                  void handleCompileProject();
+                }}
+                disabled={
+                  isOpeningProject || isUpdatingTree || isCompilingProject
+                }
+                title="Compilar projeto"
+                aria-label="Compilar projeto"
+              >
+                <FiPlay aria-hidden="true" />
+              </button>
+            </div>
+
+            <fieldset className="nav-build-type-group">
+              <legend>Tipo de build (versão)</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="build-bump-type"
+                  value="major"
+                  checked={buildBumpType === "major"}
+                  onChange={() => {
+                    setBuildBumpType("major");
+                  }}
+                  disabled={isCompilingProject}
+                />
+                <span>major</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="build-bump-type"
+                  value="minor"
+                  checked={buildBumpType === "minor"}
+                  onChange={() => {
+                    setBuildBumpType("minor");
+                  }}
+                  disabled={isCompilingProject}
+                />
+                <span>minor</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="build-bump-type"
+                  value="path"
+                  checked={buildBumpType === "path"}
+                  onChange={() => {
+                    setBuildBumpType("path");
+                  }}
+                  disabled={isCompilingProject}
+                />
+                <span>path</span>
+              </label>
+            </fieldset>
+
+            <div className="nav-version-preview">
+              Próxima versão: v{bumpVersion(buildVersion, buildBumpType)}
+            </div>
+          </div>
+
+          {compileLogs.length > 0 ? (
+            <div className="nav-compile-logs" aria-live="polite">
+              {compileLogs.map((logEntry, index) => (
+                <div
+                  key={`compile-log-${index}`}
+                  className="nav-compile-log-entry"
+                >
+                  {logEntry}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </SidebarSection>
       ) : null}
 

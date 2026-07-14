@@ -297,6 +297,125 @@
   color: #d87f7f;
 }
 
+.nav-status-text {
+  margin-left: 1.2rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #78c88a;
+}
+
+.nav-compile-controls {
+  margin-left: 1.2rem;
+  margin-top: 0.4rem;
+  margin-right: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.nav-compile-label {
+  font-size: 0.75rem;
+  color: var(--editor-gutter);
+}
+
+.nav-compile-select {
+  border: 1px solid var(--sidebar-border);
+  background: var(--button-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  border-radius: 0.3rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.nav-output-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-output-build-controls {
+  margin-left: 1.2rem;
+  margin-top: 0.45rem;
+  margin-right: 0.4rem;
+  border-top: 1px solid var(--sidebar-border);
+  padding-top: 0.45rem;
+}
+
+.nav-output-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.nav-output-item {
+  margin-left: 1.2rem;
+  cursor: default;
+}
+
+.nav-output-item:hover {
+  background: transparent;
+}
+
+.nav-output-empty {
+  margin-left: 1.2rem;
+  font-size: 0.75rem;
+  color: var(--editor-gutter);
+}
+
+.nav-build-type-group {
+  margin: 0.45rem 0 0;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 0.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.nav-build-type-group legend {
+  font-size: 0.72rem;
+  color: var(--editor-gutter);
+  padding: 0 0.2rem;
+}
+
+.nav-build-type-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}
+
+.nav-version-preview {
+  margin-top: 0.35rem;
+  font-size: 0.74rem;
+  color: var(--editor-gutter);
+}
+
+.nav-compile-logs {
+  margin-left: 1.2rem;
+  margin-right: 0.4rem;
+  margin-top: 0.35rem;
+  max-height: 9rem;
+  overflow: auto;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.45rem;
+  background: color-mix(in srgb, var(--sidebar-bg) 70%, black);
+}
+
+.nav-compile-log-entry {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--editor-gutter);
+  white-space: pre-wrap;
+}
+
+.nav-compile-log-entry + .nav-compile-log-entry {
+  margin-top: 0.22rem;
+}
+
 @media (max-width: 860px) {
   .app-sidebar {
     min-height: auto;
