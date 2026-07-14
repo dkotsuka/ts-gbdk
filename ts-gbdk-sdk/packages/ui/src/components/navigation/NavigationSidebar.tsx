@@ -1,23 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { compileToC } from "@ts-gbdk/compiler";
-import {
-  FiBookOpen,
-  FiFile,
-  FiFilePlus,
-  FiFolder,
-  FiFolderPlus,
-  FiPlus,
-  FiPlay,
-  FiTrash2,
-  FiX,
-} from "react-icons/fi";
-import { ProjectFolderTree } from "./ProjectFolderTree";
 import type {
   BrowserFileSystemDirectoryHandle,
   FileNode,
   FolderNode,
 } from "./NavigationTree.types";
-import { SidebarSection } from "./SidebarSection";
+import { BuildOutputSection } from "./sections/BuildOutputSection";
+import { DocumentationSection } from "./sections/DocumentationSection";
+import { FileNavigationSection } from "./sections/FileNavigationSection";
 
 type BrowserWindow = Window & {
   showDirectoryPicker?: () => Promise<BrowserFileSystemDirectoryHandle>;
@@ -49,33 +39,10 @@ type NativeBuildResponse = {
   ok: boolean;
   exitCode?: number;
   logs?: string[];
-  artifactPath?: string | null;
+  artifactName?: string | null;
+  artifactBase64?: string | null;
   error?: string;
 };
-
-function makefileTemplate(projectName: string): string {
-  return [
-    "ifndef GBDK_HOME",
-    "$(error Please set GBDK_HOME to your GBDK root path)",
-    "endif",
-    "",
-    "LCC = $(GBDK_HOME)/bin/lcc",
-    `PROJECTNAME = ${projectName}`,
-    "CSOURCES = $(wildcard src/*.c)",
-    "",
-    "all: gb",
-    "",
-    "gb:",
-    "\t$(LCC) -o build/$(PROJECTNAME).gb $(CSOURCES)",
-    "",
-    "gbc:",
-    "\t$(LCC) -Wm-yC -o build/$(PROJECTNAME).gbc $(CSOURCES)",
-    "",
-    "clean:",
-    "\trm -f build/*.gb build/*.gbc build/*.ihx build/*.map build/*.sym src/*.o",
-    "",
-  ].join("\n");
-}
 
 async function writeTextFile(
   folderHandle: BrowserFileSystemDirectoryHandle,
@@ -90,13 +57,24 @@ async function writeTextFile(
   await writable.close();
 }
 
+async function writeBinaryFile(
+  folderHandle: BrowserFileSystemDirectoryHandle,
+  fileName: string,
+  buffer: ArrayBuffer,
+): Promise<void> {
+  const fileHandle = await folderHandle.getFileHandle(fileName, {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(buffer);
+  await writable.close();
+}
+
 async function compileProjectMain(
   rootHandle: BrowserFileSystemDirectoryHandle,
   rootPath: string,
-  target: CompileTarget,
-  outputBaseName: string,
   appendLog: (entry: string) => void,
-): Promise<{ diagnostics: string[] }> {
+): Promise<{ diagnostics: string[]; cSource: string; headerSource: string }> {
   appendLog("[1/6] Lendo src/main.ts...");
   const srcHandle = await rootHandle.getDirectoryHandle("src");
   const mainFileHandle = await srcHandle.getFileHandle("main.ts");
@@ -109,36 +87,20 @@ async function compileProjectMain(
     source,
   });
 
-  appendLog("[3/6] Preparando diretórios de saída...");
-  const outHandle = await rootHandle.getDirectoryHandle(OUTPUT_FOLDER_NAME, {
-    create: true,
-  });
-  const outSrcHandle = await outHandle.getDirectoryHandle("src", {
-    create: true,
-  });
-  const outBuildHandle = await outHandle.getDirectoryHandle("build", {
-    create: true,
-  });
+  appendLog("[3/6] Código C gerado em memória.");
+  appendLog("[4/6] Enviando payload para compilação nativa...");
 
-  appendLog("[4/6] Gravando arquivos C gerados...");
-  await writeTextFile(outSrcHandle, "main.c", compileResult.cSource);
-  await writeTextFile(outSrcHandle, "main.h", compileResult.headerSource);
-  await writeTextFile(outHandle, "Makefile", makefileTemplate(outputBaseName));
-
-  appendLog(
-    `[5/6] Preparando comando de build para alvo ${target.toUpperCase()}...`,
-  );
-  const buildCommand = target === "gbc" ? "make gbc" : "make gb";
-
-  await writeTextFile(outBuildHandle, "build-command.txt", `${buildCommand}\n`);
-
-  appendLog("[6/6] Artefatos prontos em gbdk-out/.\n");
-
-  return { diagnostics: compileResult.diagnostics };
+  return {
+    diagnostics: compileResult.diagnostics,
+    cSource: compileResult.cSource,
+    headerSource: compileResult.headerSource,
+  };
 }
 
 async function runNativeBuild(
-  projectDir: string,
+  projectName: string,
+  cSource: string,
+  headerSource: string,
   target: CompileTarget,
 ): Promise<NativeBuildResponse> {
   const response = await fetch(`${BUILD_API_BASE_URL}/api/build`, {
@@ -146,20 +108,35 @@ async function runNativeBuild(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ projectDir, target }),
+    body: JSON.stringify({
+      projectName,
+      cSource,
+      headerSource,
+      target,
+    }),
   });
 
   if (!response.ok) {
-    const errorPayload = (await response
-      .json()
-      .catch(() => ({ error: "Falha ao chamar serviço de build." }))) as {
-      error?: string;
-    };
+    const errorPayload = (await response.json().catch(() => ({
+      error: "Falha ao chamar serviço de build.",
+    }))) as NativeBuildResponse;
 
     throw new Error(errorPayload.error ?? "Falha ao chamar serviço de build.");
   }
 
   return (await response.json()) as NativeBuildResponse;
+}
+
+function mapCompileErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.message.includes("Failed to fetch")) {
+      return "Não foi possível conectar ao servidor de build local (ui:server).";
+    }
+
+    return error.message;
+  }
+
+  return "Falha inesperada ao compilar.";
 }
 
 function bumpVersion(version: string, bumpType: BuildBumpType): string {
@@ -354,6 +331,46 @@ async function createProjectScaffold(
   }
 }
 
+async function saveBuildArtifactsToProject(
+  rootHandle: BrowserFileSystemDirectoryHandle,
+  outputBaseName: string,
+  target: CompileTarget,
+  cSource: string,
+  headerSource: string,
+  artifactName: string,
+  artifactBase64: string,
+) {
+  const outHandle = await rootHandle.getDirectoryHandle(OUTPUT_FOLDER_NAME, {
+    create: true,
+  });
+  const outSrcHandle = await outHandle.getDirectoryHandle("src", {
+    create: true,
+  });
+  const outBuildHandle = await outHandle.getDirectoryHandle("build", {
+    create: true,
+  });
+
+  await writeTextFile(outSrcHandle, "main.c", cSource);
+  await writeTextFile(outSrcHandle, "main.h", headerSource);
+
+  const buildCommand = target === "gbc" ? "make gbc" : "make gb";
+  await writeTextFile(outBuildHandle, "build-command.txt", `${buildCommand}\n`);
+
+  const binaryString = window.atob(artifactBase64);
+  const buffer = new ArrayBuffer(binaryString.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < binaryString.length; i += 1) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  await writeBinaryFile(outBuildHandle, artifactName, buffer);
+
+  const legacyName = `${outputBaseName}.${target}`;
+  if (legacyName !== artifactName) {
+    await writeBinaryFile(outBuildHandle, legacyName, buffer);
+  }
+}
+
 async function buildFolderTree(
   handle: BrowserFileSystemDirectoryHandle,
   parentPath = "",
@@ -475,9 +492,6 @@ export function NavigationSidebar({
   const [compileTarget, setCompileTarget] = useState<CompileTarget>("gb");
   const [buildBumpType, setBuildBumpType] = useState<BuildBumpType>("path");
   const [buildVersion, setBuildVersion] = useState("0.0.0");
-  const [projectSystemPath, setProjectSystemPath] = useState<string | null>(
-    null,
-  );
   const [compileLogs, setCompileLogs] = useState<string[]>([]);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<string | null>(null);
@@ -495,6 +509,12 @@ export function NavigationSidebar({
     () => collectRomFiles(outputRoot),
     [outputRoot],
   );
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setBuildVersion("0.0.0");
+    }
+  }, [projectRoot]);
 
   const isSelectedRootFolder = useMemo(() => {
     if (!projectRoot || !selectedFolder) {
@@ -619,13 +639,16 @@ export function NavigationSidebar({
       await createProjectScaffold(projectDirectoryHandle);
       await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
-      setProjectSystemPath(null);
     } catch (error) {
       const isUserAbortError =
         error instanceof DOMException && error.name === "AbortError";
 
       if (!isUserAbortError) {
-        setProjectError("Não foi possível criar a pasta do projeto.");
+        setProjectError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível criar a pasta do projeto.",
+        );
       }
     } finally {
       setIsCreatingProject(false);
@@ -649,13 +672,16 @@ export function NavigationSidebar({
       const projectDirectoryHandle = await browserWindow.showDirectoryPicker();
       await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
-      setProjectSystemPath(null);
     } catch (error) {
       const isUserAbortError =
         error instanceof DOMException && error.name === "AbortError";
 
       if (!isUserAbortError) {
-        setProjectError("Não foi possível abrir o projeto.");
+        setProjectError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível abrir o projeto.",
+        );
       }
     } finally {
       setIsOpeningProject(false);
@@ -671,7 +697,6 @@ export function NavigationSidebar({
       setProjectRoot(null);
       setOutputRoot(null);
       setSelectedFolderPath(null);
-      setProjectSystemPath(null);
       setBuildVersion("0.0.0");
       onCloseProject();
     } catch {
@@ -841,23 +866,6 @@ export function NavigationSidebar({
     const nextVersion = bumpVersion(buildVersion, buildBumpType);
     const outputBaseName = `${projectRoot.name}-v${nextVersion}`;
 
-    let localProjectPath = projectSystemPath;
-    if (!localProjectPath) {
-      const suggestedPath = `${projectRoot.name}`;
-      const pathInput = window.prompt(
-        "Informe o caminho absoluto local do projeto para executar o Makefile:",
-        suggestedPath,
-      );
-
-      if (!pathInput?.trim()) {
-        setProjectError("Compilação cancelada: caminho local não informado.");
-        return;
-      }
-
-      localProjectPath = pathInput.trim();
-      setProjectSystemPath(localProjectPath);
-    }
-
     try {
       setProjectError(null);
       setProjectStatus(null);
@@ -871,14 +879,14 @@ export function NavigationSidebar({
       const compileResult = await compileProjectMain(
         projectRoot.handle,
         projectRoot.path,
-        compileTarget,
-        outputBaseName,
         appendCompileLog,
       );
 
-      appendCompileLog("[7/8] Executando Makefile local...");
+      appendCompileLog("[5/8] Executando compilação nativa no servidor...");
       const nativeBuildResult = await runNativeBuild(
-        localProjectPath,
+        outputBaseName,
+        compileResult.cSource,
+        compileResult.headerSource,
         compileTarget,
       );
 
@@ -887,12 +895,40 @@ export function NavigationSidebar({
       }
 
       if (!nativeBuildResult.ok) {
+        const hasGbdkHomeIssue = (nativeBuildResult.logs ?? []).some((log) =>
+          log.toLowerCase().includes("gbdk_home"),
+        );
+
+        if (hasGbdkHomeIssue) {
+          throw new Error(
+            "GBDK_HOME não está configurado corretamente. Defina o caminho da instalação do GBDK (pasta que contém bin/lcc).",
+          );
+        }
+
         throw new Error(
           `Build nativo falhou (exit code ${nativeBuildResult.exitCode ?? 1}).`,
         );
       }
 
-      appendCompileLog("[8/8] Build concluído pelo Makefile.");
+      if (
+        !nativeBuildResult.artifactBase64 ||
+        !nativeBuildResult.artifactName
+      ) {
+        throw new Error("Servidor não retornou o artefato compilado.");
+      }
+
+      appendCompileLog("[6/8] Salvando artefatos no projeto local...");
+      await saveBuildArtifactsToProject(
+        projectRoot.handle,
+        outputBaseName,
+        compileTarget,
+        compileResult.cSource,
+        compileResult.headerSource,
+        nativeBuildResult.artifactName,
+        nativeBuildResult.artifactBase64,
+      );
+
+      appendCompileLog("[7/8] Atualizando árvore de arquivos...");
 
       await refreshProjectTree(projectRoot.handle);
       setBuildVersion(nextVersion);
@@ -910,13 +946,11 @@ export function NavigationSidebar({
         );
       }
 
-      if (nativeBuildResult.artifactPath) {
-        appendCompileLog(`ROM gerado: ${nativeBuildResult.artifactPath}`);
-      }
-    } catch (error) {
-      setProjectError(
-        "Não foi possível compilar. Verifique o caminho local, GBDK_HOME e o conteúdo de src/main.ts.",
+      appendCompileLog(
+        `[8/8] ROM salva: gbdk-out/build/${nativeBuildResult.artifactName}`,
       );
+    } catch (error) {
+      setProjectError(mapCompileErrorMessage(error));
       if (error instanceof Error) {
         appendCompileLog(`Erro: ${error.message}`);
       }
@@ -929,260 +963,54 @@ export function NavigationSidebar({
   return (
     <aside className="app-sidebar" aria-label="Menu de navegação">
       <div className="sidebar-title">Explorer</div>
-
-      <SidebarSection
-        title="Arquivos"
-        actions={
-          projectRoot ? (
-            <>
-              <button
-                type="button"
-                className="nav-icon-action"
-                onClick={handleOpenProject}
-                disabled={isOpeningProject || isUpdatingTree}
-                title="Abrir projeto"
-                aria-label="Abrir projeto"
-              >
-                <FiFolder aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="nav-icon-action"
-                onClick={() => {
-                  void handleCloseProject();
-                }}
-                disabled={isOpeningProject || isUpdatingTree}
-                title="Fechar projeto"
-                aria-label="Fechar projeto"
-              >
-                <FiX aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="nav-icon-action"
-                onClick={handleCreateChildFolder}
-                disabled={
-                  isUpdatingTree || isCompilingProject || !selectedFolder
-                }
-                title="Nova pasta"
-                aria-label="Nova pasta"
-              >
-                <FiFolderPlus aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="nav-icon-action"
-                onClick={handleCreateTsFile}
-                disabled={
-                  isUpdatingTree || isCompilingProject || !selectedFolder
-                }
-                title="Novo arquivo"
-                aria-label="Novo arquivo"
-              >
-                <FiFilePlus aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="nav-icon-action"
-                onClick={() => {
-                  void handleDeleteFolder();
-                }}
-                disabled={
-                  isUpdatingTree ||
-                  isCompilingProject ||
-                  !selectedFolder ||
-                  isSelectedRootFolder
-                }
-                title={
-                  isSelectedRootFolder
-                    ? "A pasta raiz não pode ser deletada"
-                    : "Deletar pasta"
-                }
-                aria-label={
-                  isSelectedRootFolder
-                    ? "A pasta raiz não pode ser deletada"
-                    : "Deletar pasta"
-                }
-              >
-                <FiTrash2 aria-hidden="true" />
-              </button>
-            </>
-          ) : null
-        }
-      >
-        {!projectRoot ? (
-          <div className="nav-project-actions">
-            <button
-              type="button"
-              className="nav-create-project"
-              onClick={handleCreateProject}
-              disabled={isCreatingProject || isOpeningProject}
-            >
-              <FiPlus aria-hidden="true" />
-              <span>
-                {isCreatingProject ? "Criando projeto..." : "Novo projeto"}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className="nav-open-project"
-              onClick={handleOpenProject}
-              disabled={isCreatingProject || isOpeningProject}
-            >
-              <FiFolder aria-hidden="true" />
-              <span>
-                {isOpeningProject
-                  ? "Abrindo projeto..."
-                  : "Abrir projeto existente"}
-              </span>
-            </button>
-          </div>
-        ) : (
-          <div className="nav-tree-wrapper">
-            <ProjectFolderTree
-              root={projectRoot}
-              activeFilePath={activeFilePath}
-              selectedFolderPath={selectedFolderPath}
-              isUpdatingTree={isUpdatingTree}
-              onSelectFolder={setSelectedFolderPath}
-              onOpenFile={handleOpenTsFile}
-              onDeleteFile={handleDeleteFile}
-            />
-          </div>
-        )}
-
-        {projectError ? (
-          <div className="nav-error-text">{projectError}</div>
-        ) : null}
-
-        {projectStatus ? (
-          <div className="nav-status-text">{projectStatus}</div>
-        ) : null}
-      </SidebarSection>
+      <FileNavigationSection
+        projectRoot={projectRoot}
+        activeFilePath={activeFilePath}
+        selectedFolderPath={selectedFolderPath}
+        selectedFolder={selectedFolder}
+        isSelectedRootFolder={isSelectedRootFolder}
+        isCreatingProject={isCreatingProject}
+        isOpeningProject={isOpeningProject}
+        isUpdatingTree={isUpdatingTree}
+        isCompilingProject={isCompilingProject}
+        projectError={projectError}
+        projectStatus={projectStatus}
+        onCreateProject={handleCreateProject}
+        onOpenProject={handleOpenProject}
+        onCloseProject={() => {
+          void handleCloseProject();
+        }}
+        onCreateChildFolder={handleCreateChildFolder}
+        onCreateTsFile={handleCreateTsFile}
+        onDeleteFolder={() => {
+          void handleDeleteFolder();
+        }}
+        onSelectFolder={setSelectedFolderPath}
+        onOpenFile={handleOpenTsFile}
+        onDeleteFile={handleDeleteFile}
+      />
 
       {projectRoot ? (
-        <SidebarSection title="Saída">
-          <div className="nav-output-list">
-            {outputRomFiles.length > 0 ? (
-              outputRomFiles.map((file) => (
-                <div key={file.path} className="nav-item nav-output-item">
-                  <FiFile aria-hidden="true" />
-                  <span>{file.name}</span>
-                </div>
-              ))
-            ) : (
-              <div className="nav-output-empty">
-                Nenhum arquivo .gb/.gbc encontrado.
-              </div>
-            )}
-          </div>
-
-          <div className="nav-output-build-controls">
-            <div className="nav-compile-controls">
-              <label className="nav-compile-label" htmlFor="compile-target">
-                Alvo de ROM:
-              </label>
-              <select
-                id="compile-target"
-                className="nav-compile-select"
-                value={compileTarget}
-                onChange={(event) => {
-                  setCompileTarget(event.target.value as CompileTarget);
-                }}
-                disabled={isCompilingProject}
-                aria-label="Selecionar alvo de ROM"
-                title="Selecionar alvo de ROM"
-              >
-                <option value="gb">GB (.gb)</option>
-                <option value="gbc">GBC (.gbc)</option>
-              </select>
-
-              <button
-                type="button"
-                className="nav-icon-action"
-                onClick={() => {
-                  void handleCompileProject();
-                }}
-                disabled={
-                  isOpeningProject || isUpdatingTree || isCompilingProject
-                }
-                title="Compilar projeto"
-                aria-label="Compilar projeto"
-              >
-                <FiPlay aria-hidden="true" />
-              </button>
-            </div>
-
-            <fieldset className="nav-build-type-group">
-              <legend>Tipo de build (versão)</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="build-bump-type"
-                  value="major"
-                  checked={buildBumpType === "major"}
-                  onChange={() => {
-                    setBuildBumpType("major");
-                  }}
-                  disabled={isCompilingProject}
-                />
-                <span>major</span>
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="build-bump-type"
-                  value="minor"
-                  checked={buildBumpType === "minor"}
-                  onChange={() => {
-                    setBuildBumpType("minor");
-                  }}
-                  disabled={isCompilingProject}
-                />
-                <span>minor</span>
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="build-bump-type"
-                  value="path"
-                  checked={buildBumpType === "path"}
-                  onChange={() => {
-                    setBuildBumpType("path");
-                  }}
-                  disabled={isCompilingProject}
-                />
-                <span>path</span>
-              </label>
-            </fieldset>
-
-            <div className="nav-version-preview">
-              Próxima versão: v{bumpVersion(buildVersion, buildBumpType)}
-            </div>
-          </div>
-
-          {compileLogs.length > 0 ? (
-            <div className="nav-compile-logs" aria-live="polite">
-              {compileLogs.map((logEntry, index) => (
-                <div
-                  key={`compile-log-${index}`}
-                  className="nav-compile-log-entry"
-                >
-                  {logEntry}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </SidebarSection>
+        <BuildOutputSection
+          projectName={projectRoot.name}
+          outputRomFiles={outputRomFiles}
+          onDetectLatestVersion={setBuildVersion}
+          isOpeningProject={isOpeningProject}
+          isUpdatingTree={isUpdatingTree}
+          isCompilingProject={isCompilingProject}
+          compileTarget={compileTarget}
+          onChangeCompileTarget={setCompileTarget}
+          buildBumpType={buildBumpType}
+          onChangeBuildBumpType={setBuildBumpType}
+          nextVersionPreview={bumpVersion(buildVersion, buildBumpType)}
+          compileLogs={compileLogs}
+          onCompileProject={() => {
+            void handleCompileProject();
+          }}
+        />
       ) : null}
 
-      <SidebarSection title="Documentação">
-        <div className="nav-item">
-          <FiBookOpen aria-hidden="true" />
-          <span>Sem itens por enquanto</span>
-        </div>
-      </SidebarSection>
+      <DocumentationSection />
     </aside>
   );
 }
