@@ -110,10 +110,26 @@ function App() {
     [openFiles],
   );
 
+  const handleCloseProject = useCallback(() => {
+    setOpenFiles([]);
+    setActiveFilePath(null);
+    setSavingFilePath(null);
+    setSaveError(null);
+  }, []);
+
+  const handleDeleteFile = useCallback((filePath: string) => {
+    setOpenFiles((currentFiles) =>
+      currentFiles.filter((file) => file.path !== filePath),
+    );
+    setActiveFilePath((current) => (current === filePath ? null : current));
+  }, []);
+
   return (
     <main className="app app-shell">
       <NavigationSidebar
         activeFilePath={activeFilePath}
+        onCloseProject={handleCloseProject}
+        onDeleteFile={handleDeleteFile}
         onOpenFile={handleOpenFile}
       />
       <section className="app-main">

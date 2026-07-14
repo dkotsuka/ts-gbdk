@@ -1,65 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiBookOpen,
-  FiFile,
   FiFilePlus,
   FiFolder,
   FiFolderPlus,
   FiPlus,
+  FiTrash2,
+  FiX,
 } from "react-icons/fi";
+import { OutputFolderTree } from "./OutputFolderTree";
+import { ProjectFolderTree } from "./ProjectFolderTree";
+import type {
+  BrowserFileSystemDirectoryHandle,
+  FileNode,
+  FolderNode,
+} from "./NavigationTree.types";
 import { SidebarSection } from "./SidebarSection";
-
-type BrowserFileSystemEntry = {
-  kind: "directory" | "file";
-  name: string;
-};
-
-type BrowserFileSystemDirectoryHandle = {
-  kind: "directory";
-  name: string;
-  values: () => AsyncIterable<BrowserFileSystemEntry>;
-  getDirectoryHandle: (
-    name: string,
-    options?: { create?: boolean },
-  ) => Promise<BrowserFileSystemDirectoryHandle>;
-  getFileHandle: (
-    name: string,
-    options?: { create?: boolean },
-  ) => Promise<FileSystemFileHandle>;
-  queryPermission?: (descriptor?: {
-    mode?: "read" | "readwrite";
-  }) => Promise<PermissionState>;
-  requestPermission?: (descriptor?: {
-    mode?: "read" | "readwrite";
-  }) => Promise<PermissionState>;
-};
 
 type BrowserWindow = Window & {
   showDirectoryPicker?: () => Promise<BrowserFileSystemDirectoryHandle>;
 };
 
-type FolderNode = {
-  path: string;
-  name: string;
-  handle: BrowserFileSystemDirectoryHandle;
-  folders: FolderNode[];
-  files: FileNode[];
-};
-
-type FileNode = {
-  path: string;
-  name: string;
-  handle: FileSystemFileHandle;
-};
-
 type NavigationSidebarProps = {
   activeFilePath: string | null;
+  onCloseProject: () => void;
+  onDeleteFile: (filePath: string) => void;
   onOpenFile: (
     filePath: string,
     fileName: string,
     fileHandle: FileSystemFileHandle,
   ) => Promise<void>;
 };
+
+const OUTPUT_FOLDER_NAME = "gbdk-out";
 
 const PERSISTENCE_DB_NAME = "ts-gbdk-ui-workspace";
 const PERSISTENCE_STORE_NAME = "workspace";
@@ -198,9 +171,24 @@ async function ensureProjectPermission(
   return false;
 }
 
+async function createProjectScaffold(
+  rootHandle: BrowserFileSystemDirectoryHandle,
+): Promise<void> {
+  await rootHandle.getDirectoryHandle("src", { create: true });
+  await rootHandle.getDirectoryHandle("assets", { create: true });
+
+  const gbdkOutHandle = await rootHandle.getDirectoryHandle("gbdk-out", {
+    create: true,
+  });
+
+  await gbdkOutHandle.getDirectoryHandle("src", { create: true });
+  await gbdkOutHandle.getDirectoryHandle("build", { create: true });
+}
+
 async function buildFolderTree(
   handle: BrowserFileSystemDirectoryHandle,
   parentPath = "",
+  allFiles = false,
 ): Promise<FolderNode> {
   const path = parentPath ? `${parentPath}/${handle.name}` : handle.name;
   const folders: FolderNode[] = [];
@@ -209,12 +197,12 @@ async function buildFolderTree(
   for await (const entry of handle.values()) {
     if (entry.kind === "directory") {
       const childHandle = await handle.getDirectoryHandle(entry.name);
-      const folderNode = await buildFolderTree(childHandle, path);
+      const folderNode = await buildFolderTree(childHandle, path, allFiles);
       folders.push(folderNode);
       continue;
     }
 
-    if (entry.name.endsWith(".ts")) {
+    if (allFiles || entry.name.endsWith(".ts")) {
       const fileHandle = await handle.getFileHandle(entry.name);
       files.push({
         path: `${path}/${entry.name}`,
@@ -252,11 +240,45 @@ function findFolderByPath(
   return null;
 }
 
+function findParentFolderByPath(
+  root: FolderNode | null,
+  targetPath: string | null,
+): FolderNode | null {
+  if (!root || !targetPath || root.path === targetPath) {
+    return null;
+  }
+
+  for (const child of root.folders) {
+    if (child.path === targetPath) {
+      return root;
+    }
+
+    const foundParent = findParentFolderByPath(child, targetPath);
+    if (foundParent) {
+      return foundParent;
+    }
+  }
+
+  return null;
+}
+
+function collectFolderFilePaths(folder: FolderNode): string[] {
+  const currentFilePaths = folder.files.map((file) => file.path);
+  const childFilePaths = folder.folders.flatMap((child) =>
+    collectFolderFilePaths(child),
+  );
+
+  return [...currentFilePaths, ...childFilePaths];
+}
+
 export function NavigationSidebar({
   activeFilePath,
+  onCloseProject,
+  onDeleteFile,
   onOpenFile,
 }: NavigationSidebarProps) {
   const [projectRoot, setProjectRoot] = useState<FolderNode | null>(null);
+  const [outputRoot, setOutputRoot] = useState<FolderNode | null>(null);
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(
     null,
   );
@@ -270,27 +292,51 @@ export function NavigationSidebar({
     [projectRoot, selectedFolderPath],
   );
 
+  const isSelectedRootFolder = useMemo(() => {
+    if (!projectRoot || !selectedFolder) {
+      return false;
+    }
+
+    return selectedFolder.path === projectRoot.path;
+  }, [projectRoot, selectedFolder]);
+
   const refreshProjectTree = useCallback(
     async (
       rootHandle: BrowserFileSystemDirectoryHandle,
       keepSelectedPath = true,
     ) => {
-      const tree = await buildFolderTree(rootHandle);
-      setProjectRoot(tree);
+      const fullTree = await buildFolderTree(rootHandle);
 
-      if (!keepSelectedPath || !selectedFolderPath) {
-        setSelectedFolderPath(tree.path);
-        return;
+      const sourceTree: FolderNode = {
+        ...fullTree,
+        folders: fullTree.folders.filter((f) => f.name !== OUTPUT_FOLDER_NAME),
+      };
+      setProjectRoot(sourceTree);
+
+      try {
+        const outHandle =
+          await rootHandle.getDirectoryHandle(OUTPUT_FOLDER_NAME);
+        const outTree = await buildFolderTree(outHandle, fullTree.path, true);
+        setOutputRoot(outTree);
+      } catch {
+        setOutputRoot(null);
       }
 
-      const selectedStillExists = Boolean(
-        findFolderByPath(tree, selectedFolderPath),
-      );
-      setSelectedFolderPath(
-        selectedStillExists ? selectedFolderPath : tree.path,
-      );
+      setSelectedFolderPath((currentSelectedFolderPath) => {
+        if (!keepSelectedPath || !currentSelectedFolderPath) {
+          return sourceTree.path;
+        }
+
+        const selectedStillExists = Boolean(
+          findFolderByPath(sourceTree, currentSelectedFolderPath),
+        );
+
+        return selectedStillExists
+          ? currentSelectedFolderPath
+          : sourceTree.path;
+      });
     },
-    [selectedFolderPath],
+    [],
   );
 
   useEffect(() => {
@@ -364,6 +410,7 @@ export function NavigationSidebar({
           create: true,
         });
 
+      await createProjectScaffold(projectDirectoryHandle);
       await persistLastProjectHandle(projectDirectoryHandle);
       await refreshProjectTree(projectDirectoryHandle, false);
     } catch (error) {
@@ -400,6 +447,22 @@ export function NavigationSidebar({
       if (!isUserAbortError) {
         setProjectError("Não foi possível abrir o projeto.");
       }
+    } finally {
+      setIsOpeningProject(false);
+    }
+  };
+
+  const handleCloseProject = async () => {
+    try {
+      setProjectError(null);
+      setIsOpeningProject(true);
+      await clearLastProjectHandle();
+      setProjectRoot(null);
+      setOutputRoot(null);
+      setSelectedFolderPath(null);
+      onCloseProject();
+    } catch {
+      setProjectError("Não foi possível fechar o projeto atual.");
     } finally {
       setIsOpeningProject(false);
     }
@@ -477,41 +540,78 @@ export function NavigationSidebar({
     }
   };
 
-  const renderFolderNode = (folder: FolderNode, depth = 0): JSX.Element => {
-    const isSelected = selectedFolderPath === folder.path;
-
-    return (
-      <div key={folder.path} className="nav-tree-node">
-        <button
-          type="button"
-          className={`nav-folder-button${isSelected ? " is-selected" : ""}`}
-          onClick={() => setSelectedFolderPath(folder.path)}
-          style={{ paddingLeft: `${1.2 + depth * 0.9}rem` }}
-        >
-          <FiFolder aria-hidden="true" />
-          <span>{folder.name}</span>
-        </button>
-
-        {folder.folders.map((childFolder) =>
-          renderFolderNode(childFolder, depth + 1),
-        )}
-
-        {folder.files.map((file) => (
-          <button
-            key={file.path}
-            type="button"
-            className={`nav-file-item${activeFilePath === file.path ? " is-active" : ""}`}
-            style={{ paddingLeft: `${2.25 + depth * 0.9}rem` }}
-            onClick={() => {
-              void handleOpenTsFile(file);
-            }}
-          >
-            <FiFile aria-hidden="true" />
-            <span>{file.name}</span>
-          </button>
-        ))}
-      </div>
+  const handleDeleteFile = async (file: FileNode, parentFolder: FolderNode) => {
+    const confirmed = window.confirm(
+      `Deletar "${file.name}"? Esta ação não pode ser desfeita.`,
     );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setProjectError(null);
+      setIsUpdatingTree(true);
+      await parentFolder.handle.removeEntry(file.name);
+      onDeleteFile(file.path);
+      const rootHandle = projectRoot?.handle;
+      if (rootHandle) {
+        await refreshProjectTree(rootHandle);
+      }
+    } catch {
+      setProjectError("Não foi possível deletar o arquivo.");
+    } finally {
+      setIsUpdatingTree(false);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!projectRoot || !selectedFolder || isSelectedRootFolder) {
+      return;
+    }
+
+    const parentFolder = findParentFolderByPath(
+      projectRoot,
+      selectedFolder.path,
+    );
+
+    if (!parentFolder) {
+      setProjectError("Não foi possível localizar a pasta pai para deletar.");
+      return;
+    }
+
+    const hasChildren =
+      selectedFolder.files.length > 0 || selectedFolder.folders.length > 0;
+
+    if (hasChildren) {
+      const confirmed = window.confirm(
+        `A pasta "${selectedFolder.name}" contém arquivos ou subpastas. Deseja deletar mesmo assim?`,
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      setProjectError(null);
+      setIsUpdatingTree(true);
+
+      await parentFolder.handle.removeEntry(selectedFolder.name, {
+        recursive: hasChildren,
+      });
+
+      for (const filePath of collectFolderFilePaths(selectedFolder)) {
+        onDeleteFile(filePath);
+      }
+
+      const rootHandle = projectRoot.handle;
+      await refreshProjectTree(rootHandle);
+    } catch {
+      setProjectError("Não foi possível deletar a pasta selecionada.");
+    } finally {
+      setIsUpdatingTree(false);
+    }
   };
 
   return (
@@ -536,6 +636,18 @@ export function NavigationSidebar({
               <button
                 type="button"
                 className="nav-icon-action"
+                onClick={() => {
+                  void handleCloseProject();
+                }}
+                disabled={isOpeningProject || isUpdatingTree}
+                title="Fechar projeto"
+                aria-label="Fechar projeto"
+              >
+                <FiX aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="nav-icon-action"
                 onClick={handleCreateChildFolder}
                 disabled={isUpdatingTree || !selectedFolder}
                 title="Nova pasta"
@@ -552,6 +664,28 @@ export function NavigationSidebar({
                 aria-label="Novo arquivo"
               >
                 <FiFilePlus aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="nav-icon-action"
+                onClick={() => {
+                  void handleDeleteFolder();
+                }}
+                disabled={
+                  isUpdatingTree || !selectedFolder || isSelectedRootFolder
+                }
+                title={
+                  isSelectedRootFolder
+                    ? "A pasta raiz não pode ser deletada"
+                    : "Deletar pasta"
+                }
+                aria-label={
+                  isSelectedRootFolder
+                    ? "A pasta raiz não pode ser deletada"
+                    : "Deletar pasta"
+                }
+              >
+                <FiTrash2 aria-hidden="true" />
               </button>
             </>
           ) : null
@@ -587,7 +721,15 @@ export function NavigationSidebar({
           </div>
         ) : (
           <div className="nav-tree-wrapper">
-            {renderFolderNode(projectRoot)}
+            <ProjectFolderTree
+              root={projectRoot}
+              activeFilePath={activeFilePath}
+              selectedFolderPath={selectedFolderPath}
+              isUpdatingTree={isUpdatingTree}
+              onSelectFolder={setSelectedFolderPath}
+              onOpenFile={handleOpenTsFile}
+              onDeleteFile={handleDeleteFile}
+            />
           </div>
         )}
 
@@ -595,6 +737,14 @@ export function NavigationSidebar({
           <div className="nav-error-text">{projectError}</div>
         ) : null}
       </SidebarSection>
+
+      {outputRoot ? (
+        <SidebarSection title="Saída">
+          <div className="nav-tree-wrapper">
+            <OutputFolderTree root={outputRoot} />
+          </div>
+        </SidebarSection>
+      ) : null}
 
       <SidebarSection title="Documentação">
         <div className="nav-item">
