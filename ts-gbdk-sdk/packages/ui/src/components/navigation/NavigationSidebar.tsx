@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { compileToC } from "@ts-gbdk/compiler";
+import type { CompilerDiagnostic } from "@ts-gbdk/compiler";
 import type {
   BrowserFileSystemDirectoryHandle,
   FileNode,
@@ -76,7 +77,13 @@ async function compileProjectMain(
   rootHandle: BrowserFileSystemDirectoryHandle,
   rootPath: string,
   appendLog: (entry: string) => void,
-): Promise<{ diagnostics: string[]; cSource: string; headerSource: string }> {
+): Promise<{
+  diagnostics: string[];
+  diagnosticsDetailed: CompilerDiagnostic[];
+  hasErrors: boolean;
+  cSource: string;
+  headerSource: string;
+}> {
   appendLog("[1/6] Lendo src/main.ts...");
   const srcHandle = await rootHandle.getDirectoryHandle("src");
   const mainFileHandle = await srcHandle.getFileHandle("main.ts");
@@ -94,6 +101,8 @@ async function compileProjectMain(
 
   return {
     diagnostics: compileResult.diagnostics,
+    diagnosticsDetailed: compileResult.diagnosticsDetailed,
+    hasErrors: compileResult.hasErrors,
     cSource: compileResult.cSource,
     headerSource: compileResult.headerSource,
   };
@@ -516,6 +525,9 @@ export function NavigationSidebar({
     string | null
   >(null);
   const [compileLogs, setCompileLogs] = useState<string[]>([]);
+  const [compileDiagnostics, setCompileDiagnostics] = useState<
+    CompilerDiagnostic[]
+  >([]);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<string | null>(null);
 
@@ -930,6 +942,7 @@ export function NavigationSidebar({
       setProjectError(null);
       setProjectStatus(null);
       setCompileLogs([]);
+      setCompileDiagnostics([]);
       setIsCompilingProject(true);
 
       appendCompileLog(
@@ -941,6 +954,33 @@ export function NavigationSidebar({
         projectRoot.path,
         appendCompileLog,
       );
+
+      setCompileDiagnostics(compileResult.diagnosticsDetailed);
+
+      const warningCount = compileResult.diagnosticsDetailed.filter(
+        (d) => d.severity === "warning",
+      ).length;
+      const errorCount = compileResult.diagnosticsDetailed.filter(
+        (d) => d.severity === "error",
+      ).length;
+
+      for (const diagnostic of compileResult.diagnosticsDetailed) {
+        appendCompileLog(
+          `[${diagnostic.severity.toUpperCase()}][${diagnostic.category}] ${diagnostic.fileName}:${diagnostic.line}:${diagnostic.column} ${diagnostic.code}: ${diagnostic.message}`,
+        );
+      }
+
+      if (compileResult.hasErrors) {
+        throw new Error(
+          `Transpilação falhou com ${errorCount} erro(s) TSGBDK. Corrija os erros antes do build nativo.`,
+        );
+      }
+
+      if (warningCount > 0) {
+        appendCompileLog(
+          `Transpilação concluída com ${warningCount} aviso(s). Continuando para build nativo...`,
+        );
+      }
 
       appendCompileLog("[5/8] Executando compilação nativa no servidor...");
       const nativeBuildResult = await runNativeBuild(
@@ -993,12 +1033,12 @@ export function NavigationSidebar({
       await refreshProjectTree(projectRoot.handle);
       setBuildVersion(nextVersion);
 
-      if (compileResult.diagnostics.length > 0) {
-        for (const diagnostic of compileResult.diagnostics) {
-          appendCompileLog(`Aviso: ${diagnostic}`);
-        }
+      if (compileResult.diagnosticsDetailed.length > 0) {
+        const warningCountAfterBuild = compileResult.diagnosticsDetailed.filter(
+          (d) => d.severity === "warning",
+        ).length;
         setProjectStatus(
-          `Compilação concluída com ${compileResult.diagnostics.length} aviso(s).`,
+          `Compilação concluída com ${warningCountAfterBuild} aviso(s).`,
         );
       } else {
         setProjectStatus(
@@ -1090,6 +1130,7 @@ export function NavigationSidebar({
           buildBumpType={buildBumpType}
           onChangeBuildBumpType={setBuildBumpType}
           nextVersionPreview={bumpVersion(buildVersion, buildBumpType)}
+          compileDiagnostics={compileDiagnostics}
           compileLogs={compileLogs}
           onCompileProject={() => {
             void handleCompileProject();

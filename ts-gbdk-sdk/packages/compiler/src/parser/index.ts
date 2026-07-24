@@ -4,6 +4,8 @@ export interface ParseIssue {
   code: string;
   message: string;
   position: number;
+  category: "syntax-subset";
+  severity: "error";
 }
 
 export interface ParsedProgram {
@@ -78,5 +80,11 @@ function hasAsyncModifier(node: ts.Node): boolean {
 }
 
 function issue(code: string, message: string, node: ts.Node): ParseIssue {
-  return { code, message, position: node.getStart() };
+  return {
+    code,
+    message,
+    position: node.getStart(),
+    category: "syntax-subset",
+    severity: "error",
+  };
 }

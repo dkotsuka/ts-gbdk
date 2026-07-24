@@ -1,5 +1,6 @@
 import ts from "typescript";
 import type { ParsedProgram } from "../parser/index.js";
+import type { CompilerDiagnostic } from "../validator/index.js";
 
 // ─── IR Types ────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,11 @@ export interface IrModule {
   frameFunctionName: string | null;
 }
 
+export interface IrBuildOutput {
+  ir: IrModule;
+  diagnostics: CompilerDiagnostic[];
+}
+
 // ─── Shared expression emitter (used by IR builder and codegen) ──────────────
 
 export function emitIrExpr(expr: IrExpr): string {
@@ -93,10 +99,17 @@ export function emitIrExpr(expr: IrExpr): string {
 // Module-level context set during each buildIr call (single-threaded, reentrant-safe for our use case)
 let _currentModule = "";
 let _localFunctionNames: Set<string> = new Set();
+let _currentSourceFile: ts.SourceFile;
+let _irDiagnostics: CompilerDiagnostic[] = [];
 
-export function buildIr(program: ParsedProgram, filePath: string): IrModule {
+export function buildIrDetailed(
+  program: ParsedProgram,
+  filePath: string,
+): IrBuildOutput {
   const moduleName = normalizeModuleName(filePath);
   _currentModule = moduleName;
+  _currentSourceFile = program.sourceFile;
+  _irDiagnostics = [];
   _localFunctionNames = new Set(
     Array.from(program.sourceFile.statements)
       .filter(
@@ -116,12 +129,19 @@ export function buildIr(program: ParsedProgram, filePath: string): IrModule {
       : null;
 
   return {
-    moduleName,
-    sourceHashHint: program.rawSource.length,
-    globalVars,
-    functions,
-    frameFunctionName,
+    ir: {
+      moduleName,
+      sourceHashHint: program.rawSource.length,
+      globalVars,
+      functions,
+      frameFunctionName,
+    },
+    diagnostics: _irDiagnostics,
   };
+}
+
+export function buildIr(program: ParsedProgram, filePath: string): IrModule {
+  return buildIrDetailed(program, filePath).ir;
 }
 
 function buildGlobalVars(sf: ts.SourceFile): IrVar[] {
@@ -231,6 +251,11 @@ function buildStmt(node: ts.Statement): IrStmt[] {
   if (ts.isBlock(node)) {
     return buildStmts(node.statements);
   }
+  pushIrDiagnostic(
+    node,
+    "TSGBDK050",
+    `statement kind '${ts.SyntaxKind[node.kind]}' is not supported by the current TS->C lowering`,
+  );
   return [
     { kind: "raw", text: `/* unsupported: ${ts.SyntaxKind[node.kind]} */` },
   ];
@@ -268,9 +293,18 @@ function buildExpr(node: ts.Expression): IrExpr {
   if (ts.isParenthesizedExpression(node)) return buildExpr(node.expression);
   if (ts.isAsExpression(node)) return buildExpr(node.expression);
   if (ts.isBinaryExpression(node)) {
+    const mappedOp = mapBinaryOp(node.operatorToken.kind);
+    if (!mappedOp) {
+      pushIrDiagnostic(
+        node.operatorToken,
+        "TSGBDK052",
+        `binary operator '${node.operatorToken.getText()}' is not supported by the current TS->C lowering`,
+      );
+      return { kind: "raw", text: `/* unsupported-binary-op */` };
+    }
     return {
       kind: "bin",
-      op: mapBinaryOp(node.operatorToken.kind),
+      op: mappedOp,
       left: buildExpr(node.left),
       right: buildExpr(node.right),
     };
@@ -283,9 +317,18 @@ function buildExpr(node: ts.Expression): IrExpr {
     ) {
       return { kind: "num", value: `-${node.operand.text}` };
     }
+    const mappedOp = mapPrefixOp(node.operator);
+    if (!mappedOp) {
+      pushIrDiagnostic(
+        node,
+        "TSGBDK053",
+        `prefix operator '${node.operator === ts.SyntaxKind.PlusToken ? "+" : (ts.tokenToString(node.operator) ?? "unknown")}' is not supported by the current TS->C lowering`,
+      );
+      return { kind: "raw", text: `/* unsupported-prefix-op */` };
+    }
     return {
       kind: "unary",
-      op: mapPrefixOp(node.operator),
+      op: mappedOp,
       operand: buildExpr(node.operand),
       prefix: true,
     };
@@ -300,16 +343,29 @@ function buildExpr(node: ts.Expression): IrExpr {
     };
   }
   if (ts.isCallExpression(node)) {
+    const callee = resolveCallee(node.expression);
+    if (!callee) {
+      pushIrDiagnostic(
+        node.expression,
+        "TSGBDK054",
+        "callee expression is not supported; use direct identifier calls or property access (e.g. sdk.fn)",
+      );
+    }
     return {
       kind: "call",
-      callee: resolveCallee(node.expression),
+      callee: callee ?? "__unknown_callee",
       args: node.arguments.map(buildExpr),
     };
   }
+  pushIrDiagnostic(
+    node,
+    "TSGBDK051",
+    `expression kind '${ts.SyntaxKind[node.kind]}' is not supported by the current TS->C lowering`,
+  );
   return { kind: "raw", text: `/* expr:${ts.SyntaxKind[node.kind]} */` };
 }
 
-function resolveCallee(expr: ts.Expression): string {
+function resolveCallee(expr: ts.Expression): string | null {
   if (ts.isIdentifier(expr)) {
     const name = expr.text;
     // Local function call -> mangle with module prefix
@@ -325,7 +381,7 @@ function resolveCallee(expr: ts.Expression): string {
     if (obj === "sdk") return prop;
     return `${obj}_${prop}`;
   }
-  return "__unknown_callee";
+  return null;
 }
 
 // ─── Type mapping ─────────────────────────────────────────────────────────────
@@ -362,7 +418,7 @@ function isArrayTypeNode(typeNode: ts.TypeNode | undefined): boolean {
   return !!typeNode && ts.isArrayTypeNode(typeNode);
 }
 
-function mapBinaryOp(op: ts.BinaryOperator): string {
+function mapBinaryOp(op: ts.BinaryOperator): string | null {
   switch (op) {
     case ts.SyntaxKind.EqualsEqualsEqualsToken:
       return "==";
@@ -415,11 +471,11 @@ function mapBinaryOp(op: ts.BinaryOperator): string {
     case ts.SyntaxKind.GreaterThanGreaterThanToken:
       return ">>";
     default:
-      return `/* op:${op} */`;
+      return null;
   }
 }
 
-function mapPrefixOp(op: ts.PrefixUnaryOperator): string {
+function mapPrefixOp(op: ts.PrefixUnaryOperator): string | null {
   switch (op) {
     case ts.SyntaxKind.ExclamationToken:
       return "!";
@@ -434,8 +490,23 @@ function mapPrefixOp(op: ts.PrefixUnaryOperator): string {
     case ts.SyntaxKind.TildeToken:
       return "~";
     default:
-      return "/* pfx */";
+      return null;
   }
+}
+
+function pushIrDiagnostic(node: ts.Node, code: string, message: string): void {
+  const { line, character } = _currentSourceFile.getLineAndCharacterOfPosition(
+    node.getStart(),
+  );
+  _irDiagnostics.push({
+    code,
+    message,
+    severity: "error",
+    category: "codegen-fallback",
+    fileName: _currentSourceFile.fileName,
+    line: line + 1,
+    column: character + 1,
+  });
 }
 
 function normalizeModuleName(filePath: string): string {

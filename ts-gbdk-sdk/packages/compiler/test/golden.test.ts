@@ -288,6 +288,63 @@ test("new expression raises TSGBDK017", () =>
 test("missing updateFrame raises TSGBDK030", () =>
   assertDiag("function someFn(): void {}", "TSGBDK030"));
 
+test("unsupported switch statement raises TSGBDK050", () =>
+  assertDiag(
+    "function updateFrame(): void { switch (1) { case 1: break; } }",
+    "TSGBDK050",
+  ));
+
+test("unsupported ternary expression raises TSGBDK051", () =>
+  assertDiag(
+    "function updateFrame(): void { let x: u8 = true ? 1 : 0; }",
+    "TSGBDK051",
+  ));
+
+test("unsupported in operator raises TSGBDK052", () =>
+  assertDiag(
+    "function updateFrame(): void { let x: bool = 1 in [1, 2]; }",
+    "TSGBDK052",
+  ));
+
+test("unsupported complex callee raises TSGBDK054", () =>
+  assertDiag(
+    "declare function joypad(): u8; function updateFrame(): void { (joypad)(); }",
+    "TSGBDK054",
+  ));
+
+test("hasErrors false for warning-only diagnostics", () => {
+  const out = compile("function someFn(): void {}");
+  assert.equal(out.hasErrors, false);
+  assert.ok(out.diagnosticsDetailed.some((d) => d.code === "TSGBDK030"));
+  assert.ok(
+    out.diagnosticsDetailed.some(
+      (d) => d.code === "TSGBDK030" && d.severity === "warning",
+    ),
+  );
+});
+
+test("hasErrors true when subset violation exists", () => {
+  const out = compile("class Foo {}");
+  assert.equal(out.hasErrors, true);
+  assert.ok(
+    out.diagnosticsDetailed.some(
+      (d) => d.code === "TSGBDK014" && d.severity === "error",
+    ),
+  );
+});
+
+test("hasErrors true when IR fallback diagnostics exist", () => {
+  const out = compile(
+    "function updateFrame(): void { let x: u8 = true ? 1 : 0; }",
+  );
+  assert.equal(out.hasErrors, true);
+  assert.ok(
+    out.diagnosticsDetailed.some(
+      (d) => d.code === "TSGBDK051" && d.category === "codegen-fallback",
+    ),
+  );
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);

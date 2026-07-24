@@ -87,9 +87,12 @@ Regra principal: usar `ts-gbdk-sdk` como escopo padrao e consultar `gbdk-2020` a
 
 ```
 ts-gbdk init <projectName> [parentDir]
-ts-gbdk transpile <input.ts> [projectDir]
-ts-gbdk build <input.ts> [projectDir] [--target gb|gbc]
+ts-gbdk transpile <input.ts> [projectDir] [--strict-diagnostics]
+ts-gbdk build <input.ts> [projectDir] [--target gb|gbc] [--no-strict-diagnostics]
 ```
+
+- `transpile` por padrao gera artefatos mesmo com diagnostics; use `--strict-diagnostics` para falhar quando houver erros.
+- `build` por padrao e estrito para evitar gerar ROM quando houver erros TSGBDK; use `--no-strict-diagnostics` para modo permissivo.
 
 ### Requisitos para build de ROM
 

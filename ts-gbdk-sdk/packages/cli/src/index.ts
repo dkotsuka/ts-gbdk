@@ -12,8 +12,8 @@ function printHelp(): void {
       "",
       "Commands:",
       "  init <projectName> [parentDir]   create a new game project",
-      "  transpile <input.ts> [projectDir]",
-      "  build <input.ts> [projectDir] [--target gb|gbc]",
+      "  transpile <input.ts> [projectDir] [--strict-diagnostics]",
+      "  build <input.ts> [projectDir] [--target gb|gbc] [--no-strict-diagnostics]",
       "  help",
     ].join("\n") + "\n",
   );
@@ -148,7 +148,11 @@ function tsconfigTemplate(relToSdk: string): string {
   );
 }
 
-function transpile(inputPath: string, projectDir: string): number {
+function transpile(
+  inputPath: string,
+  projectDir: string,
+  strictDiagnostics: boolean,
+): number {
   const absIn = resolve(process.cwd(), inputPath);
   const absProjectDir = resolve(process.cwd(), projectDir);
   const absOut = join(absProjectDir, "gbdk-out");
@@ -158,10 +162,17 @@ function transpile(inputPath: string, projectDir: string): number {
   const source = readFileSync(absIn, "utf8");
   const result = compileToC({ filePath: absIn, source });
 
-  if (result.diagnostics.length > 0) {
-    for (const d of result.diagnostics) {
-      process.stderr.write(`warning: ${d}\n`);
-    }
+  for (const d of result.diagnosticsDetailed) {
+    process.stderr.write(
+      `${d.severity}: ${d.fileName}:${d.line}:${d.column} ${d.code}: ${d.message}\n`,
+    );
+  }
+
+  if (strictDiagnostics && result.hasErrors) {
+    process.stderr.write(
+      "transpile failed: strict diagnostics mode is enabled and errors were found\n",
+    );
+    return 1;
   }
 
   mkdirSync(absOut, { recursive: true });
@@ -177,13 +188,18 @@ function transpile(inputPath: string, projectDir: string): number {
   return 0;
 }
 
-function build(inputPath: string, projectDir: string, target: string): number {
+function build(
+  inputPath: string,
+  projectDir: string,
+  target: string,
+  strictDiagnostics: boolean,
+): number {
   const absProjectDir = resolve(process.cwd(), projectDir);
   const absOut = join(absProjectDir, "gbdk-out");
   const absSrc = join(absOut, "src");
   const base = baseNameNoExt(resolve(process.cwd(), inputPath));
 
-  const transpileCode = transpile(inputPath, projectDir);
+  const transpileCode = transpile(inputPath, projectDir, strictDiagnostics);
   if (transpileCode !== 0) return transpileCode;
 
   const outputRom = join(absOut, "build", `${base}.${target}`);
@@ -272,18 +288,22 @@ function main(): number {
   if (cmd === "transpile") {
     if (args.length < 1) {
       process.stderr.write(
-        "usage: ts-gbdk transpile <input.ts> [projectDir]\n",
+        "usage: ts-gbdk transpile <input.ts> [projectDir] [--strict-diagnostics]\n",
       );
       return 1;
     }
 
-    return transpile(args[0], args[1] ?? process.cwd());
+    const strictDiagnostics = args.includes("--strict-diagnostics");
+    const projectDir =
+      args[1] && !args[1].startsWith("--") ? args[1] : process.cwd();
+
+    return transpile(args[0], projectDir, strictDiagnostics);
   }
 
   if (cmd === "build") {
     if (args.length < 1) {
       process.stderr.write(
-        "usage: ts-gbdk build <input.ts> [projectDir] [--target gb|gbc]\n",
+        "usage: ts-gbdk build <input.ts> [projectDir] [--target gb|gbc] [--no-strict-diagnostics]\n",
       );
       return 1;
     }
@@ -297,7 +317,8 @@ function main(): number {
 
     const projectDir =
       args[1] && !args[1].startsWith("--") ? args[1] : process.cwd();
-    return build(args[0], projectDir, target);
+    const strictDiagnostics = !args.includes("--no-strict-diagnostics");
+    return build(args[0], projectDir, target, strictDiagnostics);
   }
 
   process.stderr.write(`unknown command: ${cmd}\n`);

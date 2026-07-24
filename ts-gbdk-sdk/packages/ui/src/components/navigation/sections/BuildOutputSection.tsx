@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { FiFile, FiPlay } from "react-icons/fi";
+import type { CompilerDiagnostic } from "@ts-gbdk/compiler";
 import type { FileNode } from "../NavigationTree.types";
 import { IconActionButton } from "../IconActionButton";
 import { SidebarSection } from "../SidebarSection";
@@ -19,9 +20,14 @@ type BuildOutputSectionProps = {
   buildBumpType: "major" | "minor" | "path";
   onChangeBuildBumpType: (type: "major" | "minor" | "path") => void;
   nextVersionPreview: string;
+  compileDiagnostics: CompilerDiagnostic[];
   compileLogs: string[];
   onCompileProject: () => void;
 };
+
+function formatDiagnosticLocation(diagnostic: CompilerDiagnostic): string {
+  return `${diagnostic.fileName}:${diagnostic.line}:${diagnostic.column}`;
+}
 
 function parseVersionTuple(version: string): [number, number, number] {
   const parts = version.split(".");
@@ -93,6 +99,7 @@ export function BuildOutputSection({
   buildBumpType,
   onChangeBuildBumpType,
   nextVersionPreview,
+  compileDiagnostics,
   compileLogs,
   onCompileProject,
 }: BuildOutputSectionProps): JSX.Element {
@@ -230,6 +237,38 @@ export function BuildOutputSection({
           {compileLogs.map((logEntry, index) => (
             <div key={`compile-log-${index}`} className="nav-compile-log-entry">
               {logEntry}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {compileDiagnostics.length > 0 ? (
+        <div className="nav-compile-diagnostics" aria-live="polite">
+          <div className="nav-compile-diagnostics-summary">
+            {`Diagnósticos: ${compileDiagnostics.filter((d) => d.severity === "error").length} erro(s), ${compileDiagnostics.filter((d) => d.severity === "warning").length} aviso(s)`}
+          </div>
+          {compileDiagnostics.map((diagnostic, index) => (
+            <div
+              key={`compile-diagnostic-${diagnostic.code}-${index}`}
+              className={`nav-compile-diagnostic nav-compile-diagnostic-${diagnostic.severity}`}
+            >
+              <div className="nav-compile-diagnostic-head">
+                <span className="nav-compile-diagnostic-badge">
+                  {diagnostic.severity.toUpperCase()}
+                </span>
+                <span className="nav-compile-diagnostic-code">
+                  {diagnostic.code}
+                </span>
+                <span className="nav-compile-diagnostic-category">
+                  {diagnostic.category}
+                </span>
+              </div>
+              <div className="nav-compile-diagnostic-message">
+                {diagnostic.message}
+              </div>
+              <div className="nav-compile-diagnostic-location">
+                {formatDiagnosticLocation(diagnostic)}
+              </div>
             </div>
           ))}
         </div>
