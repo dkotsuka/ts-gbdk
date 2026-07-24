@@ -3,10 +3,15 @@ import { AppHeader } from "../components/layout/AppHeader";
 import { WorkspaceEditor } from "../components/editor/WorkspaceEditor";
 import { NavigationSidebar } from "../components/navigation/NavigationSidebar";
 import { EmulatorPanel } from "../components/emulator/EmulatorPanel";
+import { DocumentationPage } from "../components/documentation/DocumentationPage";
 import type { RomSelection } from "../components/emulator/EmulatorPanel";
 import type { EmulatorMode } from "../components/emulator/gameboyCore";
 import { useTheme } from "../hooks/useTheme";
 import type { FileNode } from "../components/navigation/NavigationTree.types";
+import type {
+  DocumentationCatalogContext,
+  DocumentationEntry,
+} from "../components/navigation/sections/documentationCatalog";
 
 type EditorFile = {
   path: string;
@@ -25,6 +30,14 @@ function App() {
   const [selectedRom, setSelectedRom] = useState<RomSelection | null>(null);
   const [activeRom, setActiveRom] = useState<RomSelection | null>(null);
   const [emulatorMode, setEmulatorMode] = useState<EmulatorMode>("gbc");
+  const [selectedDocumentationEntry, setSelectedDocumentationEntry] =
+    useState<DocumentationEntry | null>(null);
+  const [documentationContext, setDocumentationContext] =
+    useState<DocumentationCatalogContext>({
+      projectName: null,
+      hasProject: false,
+      hasMainFile: false,
+    });
 
   const handleOpenFile = useCallback(
     async (
@@ -124,6 +137,11 @@ function App() {
     setSaveError(null);
     setSelectedRom(null);
     setActiveRom(null);
+    setDocumentationContext({
+      projectName: null,
+      hasProject: false,
+      hasMainFile: false,
+    });
   }, []);
 
   const handleDeleteFile = useCallback((filePath: string) => {
@@ -160,22 +178,37 @@ function App() {
         onDeleteFile={handleDeleteFile}
         onSelectRom={handleSelectRom}
         onRunRom={handleRunRom}
+        selectedDocumentationEntryId={selectedDocumentationEntry?.id ?? null}
+        onSelectDocumentationEntry={(entry, context) => {
+          setDocumentationContext(context);
+          setSelectedDocumentationEntry(entry);
+        }}
         onOpenFile={handleOpenFile}
       />
       <section className="app-main">
         <AppHeader theme={theme} onToggleTheme={toggleTheme} />
         <section className="app-workspace">
-          <WorkspaceEditor
-            activeFilePath={activeFilePath}
-            files={openFiles}
-            isSaving={Boolean(
-              activeFilePath && savingFilePath === activeFilePath,
-            )}
-            saveError={saveError}
-            onChangeFileContent={handleUpdateFileContent}
-            onSaveFile={handleSaveFile}
-            onSelectFile={setActiveFilePath}
-          />
+          {selectedDocumentationEntry ? (
+            <DocumentationPage
+              selectedEntry={selectedDocumentationEntry}
+              context={documentationContext}
+              onClose={() => {
+                setSelectedDocumentationEntry(null);
+              }}
+            />
+          ) : (
+            <WorkspaceEditor
+              activeFilePath={activeFilePath}
+              files={openFiles}
+              isSaving={Boolean(
+                activeFilePath && savingFilePath === activeFilePath,
+              )}
+              saveError={saveError}
+              onChangeFileContent={handleUpdateFileContent}
+              onSaveFile={handleSaveFile}
+              onSelectFile={setActiveFilePath}
+            />
+          )}
           <EmulatorPanel
             selectedRom={selectedRom}
             activeRom={activeRom}

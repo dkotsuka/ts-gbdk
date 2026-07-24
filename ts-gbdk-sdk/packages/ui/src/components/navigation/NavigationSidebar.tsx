@@ -9,6 +9,10 @@ import type {
 import { BuildOutputSection } from "./sections/BuildOutputSection";
 import { DocumentationSection } from "./sections/DocumentationSection";
 import { FileNavigationSection } from "./sections/FileNavigationSection";
+import type {
+  DocumentationCatalogContext,
+  DocumentationEntry,
+} from "./sections/documentationCatalog";
 
 type BrowserWindow = Window & {
   showDirectoryPicker?: () => Promise<BrowserFileSystemDirectoryHandle>;
@@ -20,6 +24,11 @@ type NavigationSidebarProps = {
   onDeleteFile: (filePath: string) => void;
   onSelectRom: (file: FileNode) => void;
   onRunRom: (file: FileNode) => void;
+  selectedDocumentationEntryId: string | null;
+  onSelectDocumentationEntry: (
+    entry: DocumentationEntry,
+    context: DocumentationCatalogContext,
+  ) => void;
   onOpenFile: (
     filePath: string,
     fileName: string,
@@ -468,6 +477,21 @@ function collectFolderFilePaths(folder: FolderNode): string[] {
   return [...currentFilePaths, ...childFilePaths];
 }
 
+function hasMainTsFile(folder: FolderNode | null): boolean {
+  if (!folder) {
+    return false;
+  }
+
+  const hasMainInCurrentFolder = folder.files.some((file) =>
+    file.path.endsWith("/src/main.ts"),
+  );
+  if (hasMainInCurrentFolder) {
+    return true;
+  }
+
+  return folder.folders.some((child) => hasMainTsFile(child));
+}
+
 function collectRomFiles(folder: FolderNode | null): FileNode[] {
   if (!folder) {
     return [];
@@ -507,6 +531,8 @@ export function NavigationSidebar({
   onDeleteFile,
   onSelectRom,
   onRunRom,
+  selectedDocumentationEntryId,
+  onSelectDocumentationEntry,
   onOpenFile,
 }: NavigationSidebarProps) {
   const [projectRoot, setProjectRoot] = useState<FolderNode | null>(null);
@@ -1081,6 +1107,12 @@ export function NavigationSidebar({
     onSelectRom(preferredRom);
   };
 
+  const documentationContext: DocumentationCatalogContext = {
+    projectName: projectRoot?.name ?? null,
+    hasProject: projectRoot !== null,
+    hasMainFile: hasMainTsFile(projectRoot),
+  };
+
   return (
     <aside className="app-sidebar" aria-label="Menu de navegação">
       <div className="sidebar-title">Explorer</div>
@@ -1138,7 +1170,13 @@ export function NavigationSidebar({
         />
       ) : null}
 
-      <DocumentationSection />
+      <DocumentationSection
+        context={documentationContext}
+        selectedEntryId={selectedDocumentationEntryId}
+        onSelectEntry={(entry) => {
+          onSelectDocumentationEntry(entry, documentationContext);
+        }}
+      />
     </aside>
   );
 }

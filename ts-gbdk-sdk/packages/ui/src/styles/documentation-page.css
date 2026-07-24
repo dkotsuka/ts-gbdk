@@ -1,0 +1,160 @@
+.documentation-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--editor-bg);
+  padding: 1rem 1.2rem 1.3rem;
+}
+
+.documentation-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.documentation-page-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.documentation-page-title-wrap h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.documentation-close {
+  border: 1px solid var(--border);
+  background: var(--button-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  border-radius: 0.38rem;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+}
+
+.documentation-close:hover {
+  background: var(--button-bg-hover);
+}
+
+.documentation-page-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.74rem;
+  color: var(--editor-gutter);
+}
+
+.documentation-status {
+  border: 1px solid var(--border);
+  border-radius: 0.24rem;
+  padding: 0.12rem 0.28rem;
+}
+
+.documentation-status.status-ready {
+  border-color: #4e9b6a;
+}
+
+.documentation-status.status-declare {
+  border-color: #a88f4a;
+}
+
+.documentation-status.status-limited {
+  border-color: #b06a6a;
+}
+
+.documentation-guide,
+.documentation-usage-summary,
+.documentation-snippet-block,
+.documentation-note-block {
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.7rem 0.8rem;
+  background: color-mix(in srgb, var(--editor-bg) 86%, var(--sidebar-bg));
+}
+
+.documentation-usage-summary {
+  margin-bottom: 0.7rem;
+}
+
+.documentation-usage-summary h3 {
+  margin: 0 0 0.32rem;
+  font-size: 0.86rem;
+}
+
+.documentation-usage-summary p {
+  margin: 0;
+  color: var(--editor-gutter);
+  font-size: 0.79rem;
+  line-height: 1.45;
+}
+
+.documentation-snippet-block,
+.documentation-note-block {
+  margin-top: 0.7rem;
+}
+
+.documentation-guide h3,
+.documentation-snippet-block h3,
+.documentation-note-block h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.86rem;
+}
+
+.documentation-guide ol {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  color: var(--editor-gutter);
+  font-size: 0.78rem;
+}
+
+.documentation-snippet-block pre {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  padding: 0.55rem 0.65rem;
+  background: color-mix(in srgb, var(--editor-bg) 70%, black);
+  color: var(--editor-code);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.documentation-note-block p {
+  margin: 0;
+  color: var(--editor-gutter);
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+.documentation-page-empty {
+  border: 1px dashed var(--border);
+  border-radius: 0.45rem;
+  padding: 1.2rem;
+  text-align: center;
+  color: var(--editor-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.documentation-page-empty strong {
+  color: var(--fg);
+}
+
+@media (max-width: 860px) {
+  .documentation-page {
+    min-height: 60vh;
+  }
+}
