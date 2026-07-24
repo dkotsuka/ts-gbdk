@@ -2,7 +2,11 @@ import { useCallback, useState } from "react";
 import { AppHeader } from "../components/layout/AppHeader";
 import { WorkspaceEditor } from "../components/editor/WorkspaceEditor";
 import { NavigationSidebar } from "../components/navigation/NavigationSidebar";
+import { EmulatorPanel } from "../components/emulator/EmulatorPanel";
+import type { RomSelection } from "../components/emulator/EmulatorPanel";
+import type { EmulatorMode } from "../components/emulator/gameboyCore";
 import { useTheme } from "../hooks/useTheme";
+import type { FileNode } from "../components/navigation/NavigationTree.types";
 
 type EditorFile = {
   path: string;
@@ -18,6 +22,9 @@ function App() {
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [savingFilePath, setSavingFilePath] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [selectedRom, setSelectedRom] = useState<RomSelection | null>(null);
+  const [activeRom, setActiveRom] = useState<RomSelection | null>(null);
+  const [emulatorMode, setEmulatorMode] = useState<EmulatorMode>("gbc");
 
   const handleOpenFile = useCallback(
     async (
@@ -115,6 +122,8 @@ function App() {
     setActiveFilePath(null);
     setSavingFilePath(null);
     setSaveError(null);
+    setSelectedRom(null);
+    setActiveRom(null);
   }, []);
 
   const handleDeleteFile = useCallback((filePath: string) => {
@@ -124,27 +133,61 @@ function App() {
     setActiveFilePath((current) => (current === filePath ? null : current));
   }, []);
 
+  const handleRunRom = useCallback((rom: FileNode) => {
+    const selected: RomSelection = {
+      path: rom.path,
+      name: rom.name,
+      handle: rom.handle,
+    };
+
+    setSelectedRom(selected);
+    setActiveRom(selected);
+  }, []);
+
+  const handleSelectRom = useCallback((rom: FileNode) => {
+    setSelectedRom({
+      path: rom.path,
+      name: rom.name,
+      handle: rom.handle,
+    });
+  }, []);
+
   return (
     <main className="app app-shell">
       <NavigationSidebar
         activeFilePath={activeFilePath}
         onCloseProject={handleCloseProject}
         onDeleteFile={handleDeleteFile}
+        onSelectRom={handleSelectRom}
+        onRunRom={handleRunRom}
         onOpenFile={handleOpenFile}
       />
       <section className="app-main">
         <AppHeader theme={theme} onToggleTheme={toggleTheme} />
-        <WorkspaceEditor
-          activeFilePath={activeFilePath}
-          files={openFiles}
-          isSaving={Boolean(
-            activeFilePath && savingFilePath === activeFilePath,
-          )}
-          saveError={saveError}
-          onChangeFileContent={handleUpdateFileContent}
-          onSaveFile={handleSaveFile}
-          onSelectFile={setActiveFilePath}
-        />
+        <section className="app-workspace">
+          <WorkspaceEditor
+            activeFilePath={activeFilePath}
+            files={openFiles}
+            isSaving={Boolean(
+              activeFilePath && savingFilePath === activeFilePath,
+            )}
+            saveError={saveError}
+            onChangeFileContent={handleUpdateFileContent}
+            onSaveFile={handleSaveFile}
+            onSelectFile={setActiveFilePath}
+          />
+          <EmulatorPanel
+            selectedRom={selectedRom}
+            activeRom={activeRom}
+            mode={emulatorMode}
+            onChangeMode={setEmulatorMode}
+            onRunSelectedRom={() => {
+              if (selectedRom) {
+                setActiveRom({ ...selectedRom });
+              }
+            }}
+          />
+        </section>
       </section>
     </main>
   );

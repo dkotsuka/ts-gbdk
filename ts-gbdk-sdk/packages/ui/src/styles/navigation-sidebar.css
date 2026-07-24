@@ -350,11 +350,22 @@
 
 .nav-output-item {
   margin-left: 1.2rem;
-  cursor: default;
+  width: calc(100% - 1.2rem);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .nav-output-item:hover {
-  background: transparent;
+  background: var(--sidebar-hover);
+}
+
+.nav-output-item.is-selected {
+  background: var(--sidebar-hover);
+  outline: 1px solid var(--sidebar-border);
 }
 
 .nav-output-empty {

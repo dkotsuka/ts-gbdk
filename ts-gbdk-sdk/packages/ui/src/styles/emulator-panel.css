@@ -1,0 +1,257 @@
+.app-workspace {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+}
+
+.emulator-panel {
+  border-left: 1px solid var(--border);
+  background: linear-gradient(160deg, #0d2028 0%, #122534 100%);
+  color: #e8f7ff;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.emulator-panel-header {
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(133, 194, 227, 0.18);
+}
+
+.emulator-panel-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.emulator-action {
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 1px solid rgba(170, 219, 244, 0.22);
+  border-radius: 0.35rem;
+  background: rgba(11, 38, 53, 0.7);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.emulator-action:hover {
+  background: rgba(31, 86, 115, 0.75);
+}
+
+.emulator-controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.75rem 0.9rem 0.55rem;
+}
+
+.emulator-mode-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: rgba(222, 246, 255, 0.9);
+}
+
+.emulator-mode-select {
+  border: 1px solid rgba(170, 219, 244, 0.28);
+  border-radius: 0.35rem;
+  background: rgba(5, 24, 34, 0.82);
+  color: inherit;
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0.22rem 0.35rem;
+}
+
+.emulator-run-button,
+.emulator-secondary-button,
+.emulator-open-mobile {
+  border: 1px solid rgba(170, 219, 244, 0.28);
+  border-radius: 0.45rem;
+  background: rgba(13, 53, 73, 0.8);
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+}
+
+.emulator-run-button {
+  background: linear-gradient(180deg, #1f6d79, #165666);
+  border-color: rgba(126, 230, 211, 0.55);
+}
+
+.emulator-run-button:hover:not(:disabled),
+.emulator-secondary-button:hover:not(:disabled),
+.emulator-open-mobile:hover {
+  transform: translateY(-1px);
+}
+
+.emulator-run-button:disabled,
+.emulator-secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.emulator-screen-shell {
+  margin: 0 auto;
+  border: 1px solid rgba(168, 228, 255, 0.28);
+  border-radius: 0.7rem;
+  padding: 0.65rem;
+  background: radial-gradient(circle at top, #234455, #0d1f2e);
+}
+
+.emulator-screen-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  color: #dff8ff;
+  background: rgba(5, 24, 34, 0.82);
+  border: 1px solid rgba(185, 233, 249, 0.28);
+  border-radius: 0.45rem;
+  padding: 0.24rem 0.52rem;
+  margin-bottom: 0.5rem;
+}
+
+.emulator-screen {
+  display: block;
+  width: 320px;
+  height: 288px;
+  image-rendering: pixelated;
+  border-radius: 0.35rem;
+  border: 2px solid rgba(195, 243, 255, 0.24);
+  background: #ffffff;
+}
+
+.emulator-status {
+  padding: 0.65rem 0.95rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: rgba(222, 246, 255, 0.85);
+}
+
+.emulator-status-warning {
+  color: #ffd8a0;
+}
+
+.emulator-virtual-pad {
+  padding: 0.4rem 0.9rem 0.2rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.emulator-dpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 3rem);
+  grid-template-rows: repeat(3, 2.2rem);
+  gap: 0.3rem;
+  align-items: center;
+  justify-items: center;
+}
+
+.emulator-dpad-grid > :nth-child(1) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.emulator-dpad-grid > :nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.emulator-dpad-grid > :nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.emulator-dpad-grid > :nth-child(4) {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.emulator-action-pad {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pad-button {
+  border: 1px solid rgba(180, 227, 244, 0.35);
+  border-radius: 0.55rem;
+  background: rgba(13, 48, 67, 0.9);
+  color: #ddf6ff;
+  font: inherit;
+  font-size: 0.74rem;
+  min-width: 2.9rem;
+  min-height: 2rem;
+  cursor: pointer;
+}
+
+.pad-action {
+  width: 3.15rem;
+  height: 3.15rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.pad-meta {
+  min-width: 5.4rem;
+}
+
+.pad-button.is-pressed {
+  background: rgba(96, 213, 238, 0.38);
+  border-color: rgba(201, 249, 255, 0.75);
+}
+
+.emulator-start-select {
+  display: flex;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.9rem 0.3rem;
+}
+
+.emulator-keyboard-hint {
+  padding: 0.45rem 0.95rem 0.9rem;
+  font-size: 0.7rem;
+  color: rgba(205, 238, 250, 0.8);
+}
+
+.emulator-open-mobile {
+  margin: 0.9rem;
+}
+
+@media (max-width: 1240px) {
+  .app-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emulator-panel {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .emulator-panel:not(.is-open) {
+    padding-bottom: 0.5rem;
+  }
+
+  .emulator-panel:not(.is-open) .emulator-panel-header {
+    border-bottom: 0;
+  }
+}

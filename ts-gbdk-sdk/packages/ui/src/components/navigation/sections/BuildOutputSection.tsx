@@ -7,7 +7,10 @@ import { SidebarSection } from "../SidebarSection";
 type BuildOutputSectionProps = {
   projectName: string;
   outputRomFiles: FileNode[];
+  selectedOutputRomPath: string | null;
   onDetectLatestVersion: (version: string) => void;
+  onSelectOutputRom: (file: FileNode) => void;
+  onRunSelectedRom: () => void;
   isOpeningProject: boolean;
   isUpdatingTree: boolean;
   isCompilingProject: boolean;
@@ -78,7 +81,10 @@ function findLatestBuildVersion(
 export function BuildOutputSection({
   projectName,
   outputRomFiles,
+  selectedOutputRomPath,
   onDetectLatestVersion,
+  onSelectOutputRom,
+  onRunSelectedRom,
   isOpeningProject,
   isUpdatingTree,
   isCompilingProject,
@@ -90,6 +96,10 @@ export function BuildOutputSection({
   compileLogs,
   onCompileProject,
 }: BuildOutputSectionProps): JSX.Element {
+  const hasSelectedOutputRom =
+    selectedOutputRomPath !== null &&
+    outputRomFiles.some((file) => file.path === selectedOutputRomPath);
+
   useEffect(() => {
     const latestVersion = findLatestBuildVersion(outputRomFiles, projectName);
     onDetectLatestVersion(latestVersion ?? "0.0.0");
@@ -100,10 +110,19 @@ export function BuildOutputSection({
       <div className="nav-output-list">
         {outputRomFiles.length > 0 ? (
           outputRomFiles.map((file) => (
-            <div key={file.path} className="nav-item nav-output-item">
+            <button
+              key={file.path}
+              type="button"
+              className={`nav-item nav-output-item${
+                selectedOutputRomPath === file.path ? " is-selected" : ""
+              }`}
+              onClick={() => {
+                onSelectOutputRom(file);
+              }}
+            >
               <FiFile aria-hidden="true" />
               <span>{file.name}</span>
-            </div>
+            </button>
           ))
         ) : (
           <div className="nav-output-empty">
@@ -136,6 +155,23 @@ export function BuildOutputSection({
             title="Compilar projeto"
             disabled={isOpeningProject || isUpdatingTree || isCompilingProject}
             onClick={onCompileProject}
+          >
+            <FiPlay aria-hidden="true" />
+          </IconActionButton>
+
+          <IconActionButton
+            title={
+              hasSelectedOutputRom
+                ? "Rodar ROM selecionada"
+                : "Selecione uma ROM para rodar"
+            }
+            disabled={
+              !hasSelectedOutputRom ||
+              isOpeningProject ||
+              isUpdatingTree ||
+              isCompilingProject
+            }
+            onClick={onRunSelectedRom}
           >
             <FiPlay aria-hidden="true" />
           </IconActionButton>

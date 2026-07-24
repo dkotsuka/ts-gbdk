@@ -17,6 +17,8 @@ type NavigationSidebarProps = {
   activeFilePath: string | null;
   onCloseProject: () => void;
   onDeleteFile: (filePath: string) => void;
+  onSelectRom: (file: FileNode) => void;
+  onRunRom: (file: FileNode) => void;
   onOpenFile: (
     filePath: string,
     fileName: string,
@@ -474,10 +476,28 @@ function collectRomFiles(folder: FolderNode | null): FileNode[] {
   );
 }
 
+function pickPreferredRomFile(
+  romFiles: FileNode[],
+  preferredTarget: CompileTarget,
+): FileNode | null {
+  const preferredExtension = preferredTarget === "gbc" ? ".gbc" : ".gb";
+  const preferred = romFiles.find((file) =>
+    file.name.toLowerCase().endsWith(preferredExtension),
+  );
+
+  if (preferred) {
+    return preferred;
+  }
+
+  return romFiles[0] ?? null;
+}
+
 export function NavigationSidebar({
   activeFilePath,
   onCloseProject,
   onDeleteFile,
+  onSelectRom,
+  onRunRom,
   onOpenFile,
 }: NavigationSidebarProps) {
   const [projectRoot, setProjectRoot] = useState<FolderNode | null>(null);
@@ -489,9 +509,12 @@ export function NavigationSidebar({
   const [isOpeningProject, setIsOpeningProject] = useState(false);
   const [isUpdatingTree, setIsUpdatingTree] = useState(false);
   const [isCompilingProject, setIsCompilingProject] = useState(false);
-  const [compileTarget, setCompileTarget] = useState<CompileTarget>("gb");
+  const [compileTarget, setCompileTarget] = useState<CompileTarget>("gbc");
   const [buildBumpType, setBuildBumpType] = useState<BuildBumpType>("path");
   const [buildVersion, setBuildVersion] = useState("0.0.0");
+  const [selectedOutputRomPath, setSelectedOutputRomPath] = useState<
+    string | null
+  >(null);
   const [compileLogs, setCompileLogs] = useState<string[]>([]);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<string | null>(null);
@@ -510,11 +533,47 @@ export function NavigationSidebar({
     [outputRoot],
   );
 
+  const selectedOutputRom = useMemo(
+    () =>
+      outputRomFiles.find((file) => file.path === selectedOutputRomPath) ??
+      null,
+    [outputRomFiles, selectedOutputRomPath],
+  );
+
   useEffect(() => {
     if (!projectRoot) {
       setBuildVersion("0.0.0");
     }
   }, [projectRoot]);
+
+  useEffect(() => {
+    if (!selectedOutputRomPath) {
+      return;
+    }
+
+    const selectedStillExists = outputRomFiles.some(
+      (file) => file.path === selectedOutputRomPath,
+    );
+
+    if (!selectedStillExists) {
+      setSelectedOutputRomPath(null);
+    }
+  }, [outputRomFiles, selectedOutputRomPath]);
+
+  useEffect(() => {
+    if (selectedOutputRomPath) {
+      return;
+    }
+
+    const preferredRom = pickPreferredRomFile(outputRomFiles, compileTarget);
+
+    if (!preferredRom) {
+      return;
+    }
+
+    setSelectedOutputRomPath(preferredRom.path);
+    onSelectRom(preferredRom);
+  }, [compileTarget, onSelectRom, outputRomFiles, selectedOutputRomPath]);
 
   const isSelectedRootFolder = useMemo(() => {
     if (!projectRoot || !selectedFolder) {
@@ -697,6 +756,7 @@ export function NavigationSidebar({
       setProjectRoot(null);
       setOutputRoot(null);
       setSelectedFolderPath(null);
+      setSelectedOutputRomPath(null);
       setBuildVersion("0.0.0");
       onCloseProject();
     } catch {
@@ -960,6 +1020,27 @@ export function NavigationSidebar({
     }
   };
 
+  const handleRunSelectedRom = () => {
+    if (!selectedOutputRom) {
+      return;
+    }
+
+    onRunRom(selectedOutputRom);
+  };
+
+  const handleChangeCompileTarget = (target: CompileTarget) => {
+    setCompileTarget(target);
+
+    const preferredRom = pickPreferredRomFile(outputRomFiles, target);
+
+    if (!preferredRom) {
+      return;
+    }
+
+    setSelectedOutputRomPath(preferredRom.path);
+    onSelectRom(preferredRom);
+  };
+
   return (
     <aside className="app-sidebar" aria-label="Menu de navegação">
       <div className="sidebar-title">Explorer</div>
@@ -994,12 +1075,18 @@ export function NavigationSidebar({
         <BuildOutputSection
           projectName={projectRoot.name}
           outputRomFiles={outputRomFiles}
+          selectedOutputRomPath={selectedOutputRomPath}
           onDetectLatestVersion={setBuildVersion}
+          onSelectOutputRom={(file) => {
+            setSelectedOutputRomPath(file.path);
+            onSelectRom(file);
+          }}
+          onRunSelectedRom={handleRunSelectedRom}
           isOpeningProject={isOpeningProject}
           isUpdatingTree={isUpdatingTree}
           isCompilingProject={isCompilingProject}
           compileTarget={compileTarget}
-          onChangeCompileTarget={setCompileTarget}
+          onChangeCompileTarget={handleChangeCompileTarget}
           buildBumpType={buildBumpType}
           onChangeBuildBumpType={setBuildBumpType}
           nextVersionPreview={bumpVersion(buildVersion, buildBumpType)}
