@@ -72,6 +72,17 @@ npm test        # executa os 35 golden tests do compiler
 npm run clean   # limpa artefatos de build
 ```
 
+## Fluxo de contexto (desenvolvimento)
+
+Para reduzir ruido e acelerar tarefas no SDK:
+
+- Playbook operacional: `docs/context_playbook.md`
+- Checklist rapido por tarefa: `docs/context_60s_checklist.md`
+- Template de metricas: `docs/context_task_log_template.md`
+- Guia de agentes do Copilot: `docs/copilot_agents_usage.md`
+
+Regra principal: usar `ts-gbdk-sdk` como escopo padrao e consultar `gbdk-2020` apenas sob gatilho tecnico.
+
 ## CLI
 
 ```
