@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiPlay, FiRefreshCw, FiSquare } from "react-icons/fi";
+import { FiChevronDown, FiPlay, FiRefreshCw, FiSquare } from "react-icons/fi";
 import {
   GameboyCoreAdapter,
   type EmulatorJoypadButton,
@@ -102,6 +102,7 @@ export function EmulatorPanel({
   const [isLoadingRom, setIsLoadingRom] = useState(false);
   const [romSizeBytes, setRomSizeBytes] = useState<number | null>(null);
   const [fps, setFps] = useState<number | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const viewportSize = useMemo(
     () => ({
@@ -322,6 +323,12 @@ export function EmulatorPanel({
     };
   }, []);
 
+  useEffect(() => {
+    if (activeRom) {
+      setIsCollapsed(false);
+    }
+  }, [activeRom]);
+
   const hasSelectedRom = selectedRom !== null;
   const selectedRomExtension = selectedRom?.name.toLowerCase().endsWith(".gbc")
     ? "gbc"
@@ -380,12 +387,34 @@ export function EmulatorPanel({
   });
 
   return (
-    <aside className="emulator-panel is-open">
+    <aside
+      className={`emulator-panel is-open${isCollapsed ? " is-collapsed" : ""}`}
+    >
       <div className="emulator-panel-header">
         <strong>Game Boy Color</strong>
+        <button
+          type="button"
+          className="emulator-action emulator-collapse-toggle"
+          onClick={() => {
+            setIsCollapsed((current) => !current);
+          }}
+          title={
+            isCollapsed
+              ? "Expandir painel do emulador"
+              : "Recolher painel do emulador"
+          }
+          aria-label={
+            isCollapsed
+              ? "Expandir painel do emulador"
+              : "Recolher painel do emulador"
+          }
+          aria-expanded={!isCollapsed}
+        >
+          <FiChevronDown aria-hidden="true" />
+        </button>
       </div>
 
-      <>
+      <div className="emulator-panel-body">
         <div className="emulator-controls-row">
           <label className="emulator-mode-select-wrap" htmlFor="emulator-mode">
             <span>Modo</span>
@@ -568,7 +597,7 @@ export function EmulatorPanel({
           Teclado: setas = direcional, Z = B, X = A, Enter = Start, Shift =
           Select.
         </div>
-      </>
+      </div>
     </aside>
   );
 }

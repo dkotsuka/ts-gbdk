@@ -44,6 +44,14 @@
   background: rgba(31, 86, 115, 0.75);
 }
 
+.emulator-collapse-toggle {
+  display: none;
+}
+
+.emulator-panel.is-collapsed .emulator-collapse-toggle {
+  transform: rotate(180deg);
+}
+
 .emulator-controls-row {
   display: flex;
   align-items: center;
@@ -233,10 +241,6 @@
   color: rgba(205, 238, 250, 0.8);
 }
 
-.emulator-open-mobile {
-  margin: 0.9rem;
-}
-
 @media (max-width: 1240px) {
   .app-workspace {
     grid-template-columns: minmax(0, 1fr);
@@ -247,11 +251,19 @@
     border-top: 1px solid var(--border);
   }
 
-  .emulator-panel:not(.is-open) {
+  .emulator-collapse-toggle {
+    display: inline-flex;
+  }
+
+  .emulator-panel.is-collapsed {
     padding-bottom: 0.5rem;
   }
 
-  .emulator-panel:not(.is-open) .emulator-panel-header {
+  .emulator-panel.is-collapsed .emulator-panel-header {
     border-bottom: 0;
+  }
+
+  .emulator-panel.is-collapsed .emulator-panel-body {
+    display: none;
   }
 }
